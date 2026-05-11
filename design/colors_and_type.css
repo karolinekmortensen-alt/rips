@@ -1,0 +1,220 @@
+/* ============================================================
+   Rips Design System — tokens + base type
+   Import this first in any artifact.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* ---------- Color: paper & ink ---------- */
+  --paper:        #F4EFE6;
+  --paper-2:      #EBE4D6;
+  --paper-3:      #E1D9C6;
+  --ink:          #1A1612;
+  --ink-2:        #5C544A;
+  --ink-3:        #8A8275;
+  --ink-on-dark:  #F4EFE6;
+  --rule:         #D9D1BF;
+  --rule-strong:  #BFB6A0;
+
+  /* ---------- Color: currant (THE accent) ---------- */
+  --currant:        #B11E3A;
+  --currant-deep:   #7A1226;
+  --currant-bright: #D43757;
+  --currant-skin:   #E4A5AE;
+  --currant-wash:   #F3D9DD;
+
+  /* ---------- Color: leaf (secondary brand) ---------- */
+  --leaf:        #2F5236;
+  --leaf-deep:   #1F381F;
+  --leaf-skin:   #C6D6BD;
+  --leaf-wash:   #DDE7D5;
+
+  /* ---------- Color: amber (medium-risk / warning) ---------- */
+  --amber:       #B8761C;
+  --amber-deep:  #7A4E0F;
+  --amber-skin:  #EBD3A8;
+  --amber-wash:  #F5E5C3;
+
+  /* ---------- Semantic risk severities ---------- */
+  --risk-low:      var(--leaf);
+  --risk-medium:   var(--amber);
+  --risk-high:     var(--currant);
+  --risk-critical: var(--currant-deep);
+
+  /* ---------- Surfaces (semantic) ---------- */
+  --bg:          var(--paper);
+  --bg-raised:   #FAF7F0;
+  --bg-sunken:   var(--paper-2);
+  --bg-inverted: var(--ink);
+
+  /* ---------- Foreground (semantic) ---------- */
+  --fg-1:        var(--ink);
+  --fg-2:        var(--ink-2);
+  --fg-3:        var(--ink-3);
+  --fg-accent:   var(--currant);
+  --fg-on-accent:#FFF6F1;
+
+  /* ---------- Borders ---------- */
+  --border:        var(--rule);
+  --border-strong: var(--rule-strong);
+  --border-accent: var(--currant);
+
+  /* ---------- Typography ---------- */
+  --font-display: 'Instrument Serif', 'Newsreader', 'Cambria', 'Georgia', serif;
+  --font-sans:    'Geist', 'Geist Sans', 'Inter Tight', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', monospace;
+
+  /* type scale */
+  --fs-display-xl: 72px;   --lh-display-xl: 80px;
+  --fs-display-l:  56px;   --lh-display-l:  64px;
+  --fs-display-m:  40px;   --lh-display-m:  48px;
+  --fs-h1:         28px;   --lh-h1:         34px;
+  --fs-h2:         22px;   --lh-h2:         28px;
+  --fs-h3:         17px;   --lh-h3:         24px;
+  --fs-body:       15px;   --lh-body:       22px;
+  --fs-small:      13px;   --lh-small:      18px;
+  --fs-caption:    12px;   --lh-caption:    16px;
+
+  /* ---------- Spacing — 4px grid ---------- */
+  --s-0:  0;
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-7:  32px;
+  --s-8:  40px;
+  --s-9:  48px;
+  --s-10: 64px;
+  --s-11: 80px;
+  --s-12: 120px;
+
+  /* ---------- Radii ---------- */
+  --r-1: 2px;   /* inputs, dense controls */
+  --r-2: 4px;
+  --r-3: 6px;   /* cards */
+  --r-4: 10px;  /* modals */
+  --r-pill: 999px;
+
+  /* ---------- Elevation ---------- */
+  --shadow-0: none;
+  --shadow-1: 0 1px 0 var(--rule);
+  --shadow-2: 0 8px 24px -12px rgb(26 22 18 / .18);
+  --shadow-3: 0 24px 60px -20px rgb(26 22 18 / .25);
+
+  /* ---------- Motion ---------- */
+  --ease:        cubic-bezier(.2, .7, .2, 1);
+  --ease-in:     cubic-bezier(.5, 0, 1, .5);
+  --dur-hover:   80ms;
+  --dur-state:   120ms;
+  --dur-layout:  220ms;
+  --dur-enter:   360ms;
+}
+
+/* ============================================================
+   Base type
+   ============================================================ */
+
+html, body {
+  background: var(--bg);
+  color: var(--fg-1);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'ss01', 'cv11';
+  text-rendering: optimizeLegibility;
+}
+
+.display-xl, .display-l, .display-m {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--fg-1);
+  text-wrap: balance;
+}
+.display-xl { font-size: var(--fs-display-xl); line-height: var(--lh-display-xl); letter-spacing: -0.02em; }
+.display-l  { font-size: var(--fs-display-l);  line-height: var(--lh-display-l);  letter-spacing: -0.02em; }
+.display-m  { font-size: var(--fs-display-m);  line-height: var(--lh-display-m);  letter-spacing: -0.015em; }
+
+h1, .h1 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-h1);
+  line-height: var(--lh-h1);
+  letter-spacing: -0.01em;
+  font-weight: 500;
+  color: var(--fg-1);
+  margin: 0;
+}
+h2, .h2 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-h2);
+  line-height: var(--lh-h2);
+  letter-spacing: -0.005em;
+  font-weight: 500;
+  color: var(--fg-1);
+  margin: 0;
+}
+h3, .h3 {
+  font-family: var(--font-sans);
+  font-size: var(--fs-h3);
+  line-height: var(--lh-h3);
+  font-weight: 500;
+  color: var(--fg-1);
+  margin: 0;
+}
+
+p, .body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--fg-1);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.small {
+  font-size: var(--fs-small);
+  line-height: var(--lh-small);
+  color: var(--fg-2);
+}
+
+.caption {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--fg-2);
+}
+
+.mono, code, kbd, .num {
+  font-family: var(--font-mono);
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+}
+
+.serif-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+}
+
+a {
+  color: var(--currant);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: color var(--dur-hover) var(--ease);
+}
+a:hover { color: var(--currant-deep); }
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: var(--s-6) 0;
+}
+
+::selection {
+  background: var(--currant-skin);
+  color: var(--ink);
+}

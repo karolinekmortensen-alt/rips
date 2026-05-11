@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=1280"/>
+  <title>Rips — Risikohåndtering</title>
+  <link rel="icon" href="assets/favicon.svg"/>
+  <link rel="stylesheet" href="app.css"/>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+/* ═══════════════════════════════════════════════════════════════
+   KONSTANTER OG DATA
+═══════════════════════════════════════════════════════════════ */
+
+const PROB_LABELS = { 1: 'Svært liten', 2: 'Liten', 3: 'Moderat', 4: 'Stor', 5: 'Svært stor' };
+const CONS_LABELS = { 1: 'Ubetydelig', 2: 'Lav', 3: 'Moderat', 4: 'Alvorlig', 5: 'Kritisk' };
+const CATEGORIES  = ['IT-sikkerhet','Operasjonell','Finansiell','Compliance','HR','Prosjekt','Strategisk'];
+const SEV_LABEL   = { low: 'Lav', medium: 'Moderat', high: 'Høy', critical: 'Kritisk' };
+
+// Standard 5×5 risikomatrise (norsk trafikklys-modell)
+const ZONE_MAP = [
+  ['low','low','low','medium','medium'],          // c=1
+  ['low','low','medium','medium','high'],          // c=2
+  ['low','medium','medium','high','high'],         // c=3
+  ['low','medium','high','high','critical'],       // c=4
+  ['medium','high','high','critical','critical'],  // c=5
+];
+const getSev = (p, c) => ZONE_MAP[c - 1][p - 1];
+
+const ZONE_BG  = { low: '#DDE7D5', medium: '#F5E5C3', high: '#F3D9DD', critical: '#E4A5AE' };
+const SEV_DOT  = { low: '#2F5236', medium: '#B8761C', high: '#B11E3A', critical: '#7A1226' };
+const SEV_PILL = {
+  low:      { bg: '#DDE7D5', fg: '#1F381F' },
+  medium:   { bg: '#F5E5C3', fg: '#7A4E0F' },
+  high:     { bg: '#F3D9DD', fg: '#7A1226' },
+  critical: { bg: '#1A1612', fg: '#F3D9DD' },
+};
+
+let _uid = 200;
+const uid = (prefix) => `${prefix}-${String(++_uid).padStart(4,'0')}`;
+
+const INITIAL_COLLECTIONS = [
+  {
+    id: 'C-0001', name: 'IT-sikkerhet 2026',
+    description: 'Informasjonssikkerhet og databehandling for Sparebank Vest.',
+    owner: 'Jonas Vik', period: 'Q2 2026',
+    risks: [
+      { id:'R-0001', title:'Datalekkasje, kundedata',
+        description:'Penetrasjonstest avdekket utdatert tilgangskontroll på lese-replika. Eksponering ville rammet GDPR.',
+        owner:'Jonas Vik', category:'IT-sikkerhet', p:2, c:5,
+        mitigations:[
+          {id:'M-001',label:'Patche lese-replika',due:'15.08',done:true},
+          {id:'M-002',label:'Roter alle tjenestekontoer',due:'19.08',done:true},
+          {id:'M-003',label:'Innfør just-in-time tilgang',due:'01.10',done:false},
+        ]},
+      { id:'R-0002', title:'Brann, datasenter Bergen',
+        description:'Brannsikring ikke testet siste 24 måneder. DR-plan er utdatert.',
+        owner:'Jonas Vik', category:'IT-sikkerhet', p:1, c:5,
+        mitigations:[{id:'M-004',label:'Planlegg brannøvelse',due:'30.09',done:false}]},
+      { id:'R-0003', title:'Uautorisert tilgang, admin-portal',
+        description:'Svak passordpolicy for admin-brukere oppdaget i internrevisjon.',
+        owner:'Sara Eng', category:'IT-sikkerhet', p:3, c:4,
+        mitigations:[
+          {id:'M-005',label:'Innfør MFA for alle admins',due:'31.07',done:true},
+          {id:'M-006',label:'Gjennomgå tilgangslogg',due:'15.08',done:false},
+        ]},
+      { id:'R-0004', title:'DDoS mot betalingsportal',
+        description:'Manglende rate-limiting og DDoS-beskyttelse avdekket i kapasitetstest.',
+        owner:'Jonas Vik', category:'IT-sikkerhet', p:3, c:3, mitigations:[]},
+      { id:'R-0005', title:'Utdatert tredjeparts avhengighet',
+        description:'CVE-2025-11234 i npm-pakke brukt i kundevendt frontend.',
+        owner:'Sara Eng', category:'IT-sikkerhet', p:4, c:2,
+        mitigations:[{id:'M-007',label:'Oppdater pakke til v3.1.2',due:'10.08',done:false}]},
+    ],
+  },
+  {
+    id: 'C-0002', name: 'Operasjonell risiko 2026',
+    description: 'Operasjonell risiko for kjernevirksomheten.',
+    owner: 'Mari Røst', period: 'Q3 2026',
+    risks: [
+      { id:'R-0010', title:'Leverandørmislighold, hovedrammeavtale',
+        description:'Sannsynlighet for mislighold økt etter Q2-resultater til hovedleverandør.',
+        owner:'Mari Røst', category:'Operasjonell', p:3, c:4,
+        mitigations:[
+          {id:'M-010',label:'Reforhandle SLA innen 1. september',due:'01.09',done:true},
+          {id:'M-011',label:'Identifisere reserveleverandør i EØS',due:'15.09',done:false},
+        ]},
+      { id:'R-0011', title:'Nøkkelperson, leadarkitekt',
+        description:'Ingen dokumentert successionsplan for lederrolle med kritisk systemkunnskap.',
+        owner:'Mari Røst', category:'HR', p:2, c:3, mitigations:[]},
+      { id:'R-0012', title:'Valutaeksponering, EUR-portefølje',
+        description:'EUR/NOK volatilitet over historisk gjennomsnitt. Påvirker tre kontrakter.',
+        owner:'Eline Aas', category:'Finansiell', p:4, c:2,
+        mitigations:[{id:'M-012',label:'Forward-sikring 60 % av eksponering',due:'05.08',done:true}]},
+      { id:'R-0013', title:'Forsinket levering, ny CRM',
+        description:'Prosjektet er tre uker forsinket. Kritisk avhengighet til salgsprosessen i Q4.',
+        owner:'Sara Eng', category:'Prosjekt', p:4, c:3, mitigations:[]},
+    ],
+  },
+  {
+    id: 'C-0003', name: 'Compliance 2026',
+    description: 'Etterlevelse av regelverk og internkontroll.',
+    owner: 'Petter Lo', period: 'Q3 2026',
+    risks: [
+      { id:'R-0020', title:'Endring i hvitvaskingsregelverk',
+        description:'Nye KYC-krav fra Finanstilsynet trer i kraft 1. oktober.',
+        owner:'Petter Lo', category:'Compliance', p:4, c:3,
+        mitigations:[{id:'M-020',label:'Kartlegg gap mot nytt regelverk',due:'15.08',done:false}]},
+      { id:'R-0021', title:'Manglende segregering, godkjenninger',
+        description:'To brukere med overlappende rettigheter oppdaget i internrevisjon.',
+        owner:'Petter Lo', category:'Compliance', p:2, c:2,
+        mitigations:[{id:'M-021',label:'Gjennomgå rollematrise',due:'31.08',done:false}]},
+    ],
+  },
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   HJELPEKOMPONENTER
+═══════════════════════════════════════════════════════════════ */
+
+function Icon({ name, size = 16, color }) {
+  const p = {
+    width: size, height: size, viewBox:'0 0 24 24',
+    fill:'none', stroke: color || 'currentColor',
+    strokeWidth:1.5, strokeLinecap:'round', strokeLinejoin:'round',
+    style:{ display:'block', flexShrink:0 },
+  };
+  switch (name) {
+    case 'grid':    return <svg {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>;
+    case 'folder':  return <svg {...p}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>;
+    case 'plus':    return <svg {...p}><path d="M12 5v14M5 12h14"/></svg>;
+    case 'x':       return <svg {...p}><path d="M18 6 6 18M6 6l12 12"/></svg>;
+    case 'back':    return <svg {...p}><path d="m15 18-6-6 6-6"/></svg>;
+    case 'forward': return <svg {...p}><path d="m9 18 6-6-6-6"/></svg>;
+    case 'search':  return <svg {...p}><path d="M21 21l-4.3-4.3"/><circle cx="11" cy="11" r="7"/></svg>;
+    case 'bell':    return <svg {...p}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>;
+    case 'check':   return <svg {...p} strokeWidth={2.5}><path d="M5 12l5 5L20 7"/></svg>;
+    case 'logout':  return <svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>;
+    case 'trash':   return <svg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>;
+    default:        return null;
+  }
+}
+
+function SevPill({ sev }) {
+  const c = SEV_PILL[sev] || SEV_PILL.low;
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'2px 9px', borderRadius:999, fontSize:12, fontWeight:500, background:c.bg, color:c.fg, whiteSpace:'nowrap' }}>
+      <span style={{ width:7, height:7, borderRadius:'50%', background:SEV_DOT[sev], display:'inline-block', flexShrink:0 }}></span>
+      {SEV_LABEL[sev]}
+    </span>
+  );
+}
+
+function RipsLogo({ size = 32, bg = 'var(--paper-2)' }) {
+  const berrySize = Math.round(size * 0.22);
+  const maskW = Math.round(size * 0.28);
+  const maskH = Math.round(size * 0.26);
+  const topOff = Math.round(size * 0.09);
+  return (
+    <span style={{ fontFamily:'var(--font-display)', fontSize:size, lineHeight:1, color:'var(--ink)', letterSpacing:'-0.02em', position:'relative', whiteSpace:'nowrap', userSelect:'none' }}>
+      r
+      <span style={{ position:'relative', display:'inline-block' }}>
+        i
+        <span style={{ position:'absolute', top:1, left:'50%', transform:'translateX(-50%)', width:maskW, height:maskH, background:bg }}></span>
+        <span style={{ position:'absolute', top:topOff, left:'50%', transform:'translateX(-50%)', width:berrySize, height:berrySize, borderRadius:'50%', background:'var(--currant)', boxShadow:'inset 1px 1px 0 0 var(--currant-skin)' }}></span>
+      </span>
+      ps
+    </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VELKOMSTSIDE
+═══════════════════════════════════════════════════════════════ */
+
+function WelcomePage({ onLogin }) {
+  return (
+    <div className="welcome-page">
+      <nav className="welcome-nav">
+        <RipsLogo size={28} bg="var(--paper)" />
+        <button className="rips-btn" onClick={onLogin}>Logg inn</button>
+      </nav>
+      <div className="welcome-hero">
+        <div className="welcome-content">
+          <div className="welcome-eyebrow">Risikostyring · Norge · 2026</div>
+          <h1 className="welcome-headline">Se risiko <em>klart.</em></h1>
+          <p className="welcome-lede">
+            Rips er et stille verktøy for arbeidet som ikke tåler kaos: kartlegg risiko, eie tiltak, og legg sporet ned for revisor — uten å heve stemmen.
+          </p>
+          <div className="welcome-actions">
+            <button className="rips-btn" style={{ padding:'11px 24px', fontSize:15 }} onClick={onLogin}>Logg inn</button>
+          </div>
+          <div className="welcome-meta">
+            <div><span className="cap">Samlinger</span><span className="welcome-val">Ubegrenset</span></div>
+            <div><span className="cap">Risikomatrise</span><span className="welcome-val">Innebygd</span></div>
+            <div><span className="cap">Tiltak</span><span className="welcome-val">Med frist og eier</span></div>
+          </div>
+        </div>
+        <img className="welcome-cluster" src="assets/rips-cluster-large.svg" alt="" />
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PÅLOGGINGSSIDE
+═══════════════════════════════════════════════════════════════ */
+
+function LoginPage({ onSuccess, onBack }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!username.trim()) { setError('Brukernavn er påkrevd.'); return; }
+    if (!password.trim()) { setError('Passord er påkrevd.'); return; }
+    onSuccess({ name: username.trim() });
+  };
+
+  return (
+    <div className="login-page">
+      <button
+        className="rips-btn-ghost"
+        style={{ position:'absolute', top:24, left:24, display:'flex', alignItems:'center', gap:6, fontSize:13 }}
+        onClick={onBack}
+      >
+        <Icon name="back" size={14} /> Tilbake
+      </button>
+      <div className="login-card">
+        <div style={{ textAlign:'center', marginBottom:28 }}>
+          <RipsLogo size={38} bg="var(--paper)" />
+        </div>
+        <h2 style={{ fontSize:22, fontWeight:500, letterSpacing:'-0.005em', margin:'0 0 6px', textAlign:'center' }}>Logg inn</h2>
+        <p style={{ fontSize:13, color:'var(--ink-2)', margin:'0 0 24px', textAlign:'center' }}>Skriv inn brukernavn og passord for å fortsette.</p>
+        {error && <div className="login-error">{error}</div>}
+        <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          <div className="form-group">
+            <label className="form-label">Brukernavn</label>
+            <input className="rips-input" type="text" value={username} onChange={e => { setUsername(e.target.value); setError(''); }} placeholder="ditt.navn@bedrift.no" autoFocus />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Passord</label>
+            <input className="rips-input" type="password" value={password} onChange={e => { setPassword(e.target.value); setError(''); }} placeholder="••••••••" />
+          </div>
+          <button className="rips-btn" type="submit" style={{ width:'100%', justifyContent:'center', height:40, fontSize:14, marginTop:8 }}>
+            Logg inn
+          </button>
+        </form>
+        <p style={{ fontSize:11, color:'var(--ink-3)', marginTop:20, textAlign:'center' }}>Demo: bruk et hvilket som helst brukernavn og passord.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════════════════════ */
+
+function Sidebar({ view, setView, collections, user, onLogout }) {
+  const navItems = [
+    { id:'dashboard',   label:'Oversikt',   icon:'grid'   },
+    { id:'collections', label:'Samlinger',  icon:'folder', count: collections.length },
+  ];
+  const isCollectionActive = view === 'collection' || view === 'collections';
+
+  return (
+    <aside className="rips-sidebar">
+      <div className="rips-brand">
+        <RipsLogo size={30} bg="var(--paper-2)" />
+        <span className="rips-org">{user?.name || 'Bruker'}</span>
+      </div>
+      <div className="rips-sec">Workspace</div>
+      {navItems.map(item => (
+        <div
+          key={item.id}
+          className={`rips-item ${(view === item.id || (item.id === 'collections' && isCollectionActive)) ? 'sel' : ''}`}
+          onClick={() => setView(item.id)}
+        >
+          <Icon name={item.icon} size={16} />
+          <span>{item.label}</span>
+          {item.count != null && <span className="rips-count">{item.count}</span>}
+        </div>
+      ))}
+      <div style={{ flex:1 }}></div>
+      <div className="rips-item" style={{ color:'var(--ink-2)', marginTop:'auto' }} onClick={onLogout}>
+        <Icon name="logout" size={16} />
+        <span>Logg ut</span>
+      </div>
+    </aside>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOPBAR
+═══════════════════════════════════════════════════════════════ */
+
+function TopBar({ crumbs, user }) {
+  const initials = (name) => name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+  return (
+    <header className="rips-topbar">
+      <nav className="rips-crumbs">
+        {crumbs.map((c, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <span className="rips-sep">/</span>}
+            <span className={i === crumbs.length - 1 ? 'rips-current' : ''}>{c}</span>
+          </React.Fragment>
+        ))}
+      </nav>
+      <div className="rips-search">
+        <Icon name="search" size={14} />
+        <input placeholder="Søk risiko, samling, eier…" readOnly />
+        <kbd>⌘K</kbd>
+      </div>
+      <div className="rips-topright">
+        <button className="rips-btn-ghost" style={{ padding:6, borderRadius:6, height:32, width:32, justifyContent:'center' }}>
+          <Icon name="bell" size={16} />
+        </button>
+        <div className="rips-avatar">{initials(user?.name || 'Admin')}</div>
+      </div>
+    </header>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RISIKOMATRISE (SVG 5×5)
+═══════════════════════════════════════════════════════════════ */
+
+function RiskMatrix({ risks, onRiskClick }) {
+  const [hovered, setHovered] = useState(null);
+
+  const ML = 66, MR = 16, MT = 16, MB = 54;
+  const CW = 76, CH = 54;
+  const W  = ML + 5 * CW + MR;   // 462
+  const H  = MT + 5 * CH + MB;   // 340
+
+  const cx = (p) => ML + (p - 1) * CW + CW / 2;
+  const cy = (c) => MT + (5 - c) * CH + CH / 2;
+
+  // Group risks at same cell
+  const groups = {};
+  risks.forEach(r => {
+    const key = `${r.p},${r.c}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  });
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      width="100%"
+      style={{ display:'block', maxWidth: W }}
+    >
+      {/* Background cells */}
+      {[1,2,3,4,5].flatMap(c =>
+        [1,2,3,4,5].map(p => (
+          <rect
+            key={`bg-${p}-${c}`}
+            x={ML + (p-1)*CW} y={MT + (5-c)*CH}
+            width={CW} height={CH}
+            fill={ZONE_BG[getSev(p, c)]}
+            stroke="rgba(255,255,255,0.7)" strokeWidth={1}
+          />
+        ))
+      )}
+
+      {/* Outer border */}
+      <rect x={ML} y={MT} width={5*CW} height={5*CH} fill="none" stroke="var(--rule-strong)" strokeWidth={1} />
+
+      {/* X-axis tick labels */}
+      {[1,2,3,4,5].map(p => (
+        <text key={`xl-${p}`} x={cx(p)} y={H - MB + 18} textAnchor="middle" fontSize={11} fill="#5C544A" fontFamily="Geist,system-ui">
+          {p}
+        </text>
+      ))}
+      {/* X-axis sub-labels */}
+      {[1,2,3,4,5].map(p => (
+        <text key={`xs-${p}`} x={cx(p)} y={H - MB + 32} textAnchor="middle" fontSize={9.5} fill="#8A8275" fontFamily="Geist,system-ui">
+          {PROB_LABELS[p].split(' ')[0]}
+        </text>
+      ))}
+      <text x={ML + 5*CW/2} y={H - 4} textAnchor="middle" fontSize={10} fill="#8A8275" fontFamily="Geist,system-ui" letterSpacing="0.06em">
+        SANNSYNLIGHET
+      </text>
+
+      {/* Y-axis tick labels */}
+      {[1,2,3,4,5].map(c => (
+        <text key={`yl-${c}`} x={ML - 8} y={cy(c) + 4} textAnchor="end" fontSize={11} fill="#5C544A" fontFamily="Geist,system-ui">
+          {c}
+        </text>
+      ))}
+      <text
+        transform={`translate(13,${MT + 5*CH/2}) rotate(-90)`}
+        textAnchor="middle" fontSize={10} fill="#8A8275" fontFamily="Geist,system-ui" letterSpacing="0.06em"
+      >
+        KONSEKVENS
+      </text>
+
+      {/* Risk dots */}
+      {Object.entries(groups).map(([key, grp]) => {
+        const [p, c] = key.split(',').map(Number);
+        return grp.map((r, idx) => {
+          const sev = getSev(r.p, r.c);
+          const offset = grp.length > 1 ? (idx - (grp.length - 1) / 2) * 18 : 0;
+          const dotX = cx(p) + offset;
+          const dotY = cy(c);
+          const isHov = hovered?.id === r.id;
+          return (
+            <g
+              key={r.id}
+              style={{ cursor:'pointer' }}
+              onClick={() => onRiskClick(r.id)}
+              onMouseEnter={() => setHovered(r)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <circle cx={dotX} cy={dotY} r={isHov ? 12 : 10} fill={SEV_DOT[sev]} stroke="white" strokeWidth={1.5} opacity={hovered && !isHov ? 0.45 : 1} style={{ transition:'r 80ms, opacity 80ms' }} />
+            </g>
+          );
+        });
+      })}
+
+      {/* Tooltip (SVG-native, rendered above dots) */}
+      {hovered && (() => {
+        const sev = getSev(hovered.p, hovered.c);
+        const tipW = 206, tipH = 50;
+        const rawX = cx(hovered.p) - tipW / 2;
+        const rawY = cy(hovered.c) > MT + CH * 2 ? cy(hovered.c) - tipH - 14 : cy(hovered.c) + 16;
+        const tipX = Math.max(ML, Math.min(rawX, W - MR - tipW));
+        return (
+          <g pointerEvents="none">
+            <rect x={tipX} y={rawY} width={tipW} height={tipH} rx={4} fill="var(--ink)" />
+            <text x={tipX + 12} y={rawY + 18} fontSize={12} fill="var(--paper)" fontFamily="Geist,system-ui" fontWeight="500">
+              {hovered.title.length > 26 ? hovered.title.slice(0,26) + '…' : hovered.title}
+            </text>
+            <text x={tipX + 12} y={rawY + 35} fontSize={10.5} fill="#8A8275" fontFamily="Geist,system-ui">
+              {`S:${hovered.p} · K:${hovered.c} · Score ${hovered.p * hovered.c} · ${SEV_LABEL[sev]}`}
+            </text>
+          </g>
+        );
+      })()}
+    </svg>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RISIKOTABELL
+═══════════════════════════════════════════════════════════════ */
+
+function RiskTable({ risks, onOpen }) {
+  return (
+    <table className="rips-table">
+      <thead>
+        <tr>
+          <th style={{ width:84 }}>ID</th>
+          <th>Tittel</th>
+          <th style={{ width:120 }}>Eier</th>
+          <th style={{ width:120 }}>Kategori</th>
+          <th style={{ width:100, textAlign:'center' }}>Sannsynlighet</th>
+          <th style={{ width:100, textAlign:'center' }}>Konsekvens</th>
+          <th style={{ width:100 }}>Alvor</th>
+          <th style={{ width:80, textAlign:'center' }}>Tiltak</th>
+        </tr>
+      </thead>
+      <tbody>
+        {risks.map(r => {
+          const sev = getSev(r.p, r.c);
+          const done = r.mitigations.filter(m => m.done).length;
+          const total = r.mitigations.length;
+          return (
+            <tr key={r.id} onClick={() => onOpen(r.id)}>
+              <td className="mono accent">{r.id}</td>
+              <td><span style={{ fontWeight:500 }}>{r.title}</span></td>
+              <td>{r.owner}</td>
+              <td className="muted">{r.category}</td>
+              <td className="mono" style={{ textAlign:'center' }}>
+                {r.p} <span style={{ color:'var(--ink-3)', fontFamily:'var(--font-sans)', fontSize:11 }}>{PROB_LABELS[r.p]}</span>
+              </td>
+              <td className="mono" style={{ textAlign:'center' }}>
+                {r.c} <span style={{ color:'var(--ink-3)', fontFamily:'var(--font-sans)', fontSize:11 }}>{CONS_LABELS[r.c]}</span>
+              </td>
+              <td><SevPill sev={sev} /></td>
+              <td className="mono" style={{ textAlign:'center', color: total > 0 && done === total ? 'var(--leaf)' : total > 0 ? 'var(--ink-2)' : 'var(--ink-3)' }}>
+                {total > 0 ? `${done}/${total}` : '—'}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RISIKOSKUFF (DRAWER)
+═══════════════════════════════════════════════════════════════ */
+
+function RiskDrawer({ risk, onClose, onUpdate, onDelete }) {
+  const [addingMit, setAddingMit] = useState(false);
+  const [mitLabel, setMitLabel]   = useState('');
+  const [mitDue, setMitDue]       = useState('');
+
+  if (!risk) return null;
+  const sev = getSev(risk.p, risk.c);
+
+  const toggleMit = (id) => {
+    onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === id ? { ...m, done: !m.done } : m) });
+  };
+
+  const removeMit = (id) => {
+    onUpdate({ ...risk, mitigations: risk.mitigations.filter(m => m.id !== id) });
+  };
+
+  const saveMit = () => {
+    if (!mitLabel.trim()) return;
+    const m = { id: uid('M'), label: mitLabel.trim(), due: mitDue.trim(), done: false };
+    onUpdate({ ...risk, mitigations: [...risk.mitigations, m] });
+    setMitLabel(''); setMitDue(''); setAddingMit(false);
+  };
+
+  const doneCount = risk.mitigations.filter(m => m.done).length;
+
+  return (
+    <>
+      <div className="rips-scrim" onClick={onClose}></div>
+      <aside className="rips-drawer">
+        <header className="rips-drawer-head">
+          <div>
+            <div className="rips-cap">Risiko · <span className="mono">{risk.id}</span></div>
+            <h2 className="rips-drawer-title">{risk.title}</h2>
+          </div>
+          <div style={{ display:'flex', gap:4 }}>
+            <button
+              className="rips-btn-ghost rips-small"
+              style={{ color:'var(--ink-3)' }}
+              onClick={() => { if (confirm(`Slett risiko "${risk.title}"?`)) onDelete(risk.id); }}
+              title="Slett risiko"
+            >
+              <Icon name="trash" size={13} />
+            </button>
+            <button className="rips-btn-ghost" style={{ padding:6 }} onClick={onClose} title="Lukk">
+              <Icon name="x" size={16} />
+            </button>
+          </div>
+        </header>
+
+        <div className="rips-drawer-grid">
+          <div className="rips-field">
+            <div className="rips-cap">Alvor</div>
+            <SevPill sev={sev} />
+          </div>
+          <div className="rips-field">
+            <div className="rips-cap">Eier</div>
+            <div style={{ fontSize:14 }}>{risk.owner}</div>
+          </div>
+          <div className="rips-field">
+            <div className="rips-cap">Kategori</div>
+            <div style={{ fontSize:14 }}>{risk.category}</div>
+          </div>
+          <div className="rips-field">
+            <div className="rips-cap">Sannsynlighet</div>
+            <div className="mono">{risk.p} — {PROB_LABELS[risk.p]}</div>
+          </div>
+          <div className="rips-field">
+            <div className="rips-cap">Konsekvens</div>
+            <div className="mono">{risk.c} — {CONS_LABELS[risk.c]}</div>
+          </div>
+          <div className="rips-field">
+            <div className="rips-cap">Risikoscore</div>
+            <div className="mono" style={{ fontSize:18, fontFamily:'var(--font-display)', letterSpacing:'-0.01em' }}>{risk.p * risk.c}</div>
+          </div>
+        </div>
+
+        <section className="rips-section">
+          <div className="rips-cap" style={{ marginBottom:8 }}>Beskrivelse</div>
+          <p className="rips-body">
+            {risk.description || <em style={{ color:'var(--ink-3)' }}>Ingen beskrivelse ennå. Legg til kontekst slik at neste eier kan handle uten å spørre.</em>}
+          </p>
+        </section>
+
+        <section className="rips-section">
+          <div className="rips-section-head">
+            <div className="rips-cap">
+              Tiltak <span style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--ink-3)', fontWeight:400, textTransform:'none', letterSpacing:0 }}>({doneCount}/{risk.mitigations.length})</span>
+            </div>
+            {!addingMit && (
+              <button className="rips-btn-secondary rips-small" onClick={() => setAddingMit(true)}>
+                <Icon name="plus" size={12} /> Nytt tiltak
+              </button>
+            )}
+          </div>
+
+          {addingMit && (
+            <div className="mit-add-form">
+              <input
+                className="rips-input"
+                placeholder="Beskriv tiltaket…"
+                value={mitLabel}
+                onChange={e => setMitLabel(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveMit(); if (e.key === 'Escape') setAddingMit(false); }}
+                autoFocus
+              />
+              <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                <input
+                  className="rips-input"
+                  placeholder="Frist (31.08)"
+                  value={mitDue}
+                  onChange={e => setMitDue(e.target.value)}
+                  style={{ width:130, flex:'none' }}
+                />
+                <button className="rips-btn rips-small" onClick={saveMit}>Legg til</button>
+                <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); }}>Avbryt</button>
+              </div>
+            </div>
+          )}
+
+          <ul className="rips-mitigations">
+            {risk.mitigations.length === 0 && !addingMit && (
+              <li style={{ color:'var(--ink-3)', fontStyle:'italic', border:'none', paddingTop:8 }}>Ingen tiltak registrert ennå.</li>
+            )}
+            {risk.mitigations.map(m => (
+              <li key={m.id}>
+                <span className={`rips-check ${m.done ? 'done' : ''}`} onClick={() => toggleMit(m.id)} title={m.done ? 'Marker som åpen' : 'Marker som fullført'}>
+                  {m.done && <Icon name="check" size={10} />}
+                </span>
+                <span className={m.done ? 'done' : ''} style={{ flex:1 }}>{m.label}</span>
+                {m.due && <span className="rips-due">{m.due}</span>}
+                <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-3)' }} onClick={() => removeMit(m.id)}>
+                  <Icon name="x" size={12} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      </aside>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MODAL: NY SAMLING
+═══════════════════════════════════════════════════════════════ */
+
+function AddCollectionModal({ onClose, onAdd }) {
+  const [name,   setName]   = useState('');
+  const [desc,   setDesc]   = useState('');
+  const [owner,  setOwner]  = useState('');
+  const [period, setPeriod] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim() || !owner.trim()) return;
+    onAdd({ id: uid('C'), name: name.trim(), description: desc.trim(), owner: owner.trim(), period: period.trim(), risks: [] });
+    onClose();
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal">
+        <div className="modal-head">
+          <h3 style={{ margin:0, fontWeight:500, fontSize:17 }}>Ny risikosamling</h3>
+          <button className="rips-btn-ghost" style={{ padding:6 }} onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding:'20px 24px 24px', display:'flex', flexDirection:'column', gap:16 }}>
+          <div className="form-group">
+            <label className="form-label">Navn *</label>
+            <input className="rips-input" value={name} onChange={e => setName(e.target.value)} placeholder="IT-sikkerhet 2026" autoFocus required />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Beskrivelse</label>
+            <textarea className="rips-input" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Kort beskrivelse av hva samlingen dekker…" rows={3} />
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+            <div className="form-group">
+              <label className="form-label">Eier *</label>
+              <input className="rips-input" value={owner} onChange={e => setOwner(e.target.value)} placeholder="Fornavn Etternavn" required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Periode</label>
+              <input className="rips-input" value={period} onChange={e => setPeriod(e.target.value)} placeholder="Q3 2026" />
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+            <button type="button" className="rips-btn-secondary" onClick={onClose}>Avbryt</button>
+            <button type="submit" className="rips-btn">Opprett samling</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MODAL: NY RISIKO
+═══════════════════════════════════════════════════════════════ */
+
+function AddRiskModal({ onClose, onAdd }) {
+  const [title, setTitle] = useState('');
+  const [owner, setOwner] = useState('');
+  const [cat,   setCat]   = useState('IT-sikkerhet');
+  const [p,     setP]     = useState(3);
+  const [c,     setC]     = useState(3);
+  const [desc,  setDesc]  = useState('');
+
+  const previewSev = getSev(Number(p), Number(c));
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim() || !owner.trim()) return;
+    onAdd({ id: uid('R'), title: title.trim(), owner: owner.trim(), category: cat, p: Number(p), c: Number(c), description: desc.trim(), mitigations: [] });
+    onClose();
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" style={{ maxWidth:600 }}>
+        <div className="modal-head">
+          <h3 style={{ margin:0, fontWeight:500, fontSize:17 }}>Ny risiko</h3>
+          <button className="rips-btn-ghost" style={{ padding:6 }} onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} style={{ padding:'20px 24px 24px', display:'flex', flexDirection:'column', gap:16 }}>
+          <div className="form-group">
+            <label className="form-label">Tittel *</label>
+            <input className="rips-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Beskriv risikoen kort og presist" autoFocus required />
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+            <div className="form-group">
+              <label className="form-label">Eier *</label>
+              <input className="rips-input" value={owner} onChange={e => setOwner(e.target.value)} placeholder="Fornavn Etternavn" required />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Kategori</label>
+              <select className="rips-input rips-select" value={cat} onChange={e => setCat(e.target.value)}>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14, alignItems:'start' }}>
+            <div className="form-group">
+              <label className="form-label">Sannsynlighet (1–5)</label>
+              <select className="rips-input rips-select" value={p} onChange={e => setP(Number(e.target.value))}>
+                {[1,2,3,4,5].map(v => <option key={v} value={v}>{v} — {PROB_LABELS[v]}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Konsekvens (1–5)</label>
+              <select className="rips-input rips-select" value={c} onChange={e => setC(Number(e.target.value))}>
+                {[1,2,3,4,5].map(v => <option key={v} value={v}>{v} — {CONS_LABELS[v]}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Beregnet alvor</label>
+              <div style={{ paddingTop:8 }}><SevPill sev={previewSev} /></div>
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Beskrivelse</label>
+            <textarea className="rips-input" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Kontekst, årsak og mulige konsekvenser…" rows={3} />
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
+            <button type="button" className="rips-btn-secondary" onClick={onClose}>Avbryt</button>
+            <button type="submit" className="rips-btn">Legg til risiko</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISNING: DASHBOARD
+═══════════════════════════════════════════════════════════════ */
+
+function DashboardView({ collections, setView, setSelectedCollectionId }) {
+  const totalRisks = collections.reduce((s,c) => s + c.risks.length, 0);
+  const highOrCrit = collections.reduce((s,c) => s + c.risks.filter(r => ['high','critical'].includes(getSev(r.p,r.c))).length, 0);
+  const critCount  = collections.reduce((s,c) => s + c.risks.filter(r => getSev(r.p,r.c) === 'critical').length, 0);
+  const openMits   = collections.reduce((s,c) => s + c.risks.reduce((s2,r) => s2 + r.mitigations.filter(m => !m.done).length, 0), 0);
+
+  const kpis = [
+    { cap:'Risikosamlinger',    num: collections.length, sub:'totalt i workspace' },
+    { cap:'Registrerte risikoer', num: totalRisks,       sub:'på tvers av samlinger' },
+    { cap:'Høy eller kritisk',  num: highOrCrit,         sub:`${critCount} kritiske` },
+    { cap:'Åpne tiltak',        num: openMits,           sub:'ikke fullført' },
+  ];
+
+  return (
+    <div className="app-page">
+      <header className="page-head">
+        <div className="page-title-block">
+          <div className="rips-cap">Dashboard · {new Date().getFullYear()}</div>
+          <h1 className="page-title">Oversikt, <em>som det står nå</em></h1>
+        </div>
+      </header>
+
+      <section className="rips-kpis" style={{ marginBottom:28 }}>
+        {kpis.map((k,i) => (
+          <div key={i} className="rips-kpi">
+            <div className="rips-cap">{k.cap}</div>
+            <div className="rips-num">{k.num}</div>
+            <div className="rips-sub-text">{k.sub}</div>
+          </div>
+        ))}
+      </section>
+
+      <div className="rips-cap" style={{ marginBottom:10 }}>Samlinger</div>
+      <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, overflow:'hidden' }}>
+        {collections.length === 0 ? (
+          <div style={{ padding:'40px 24px', textAlign:'center', color:'var(--ink-3)', fontStyle:'italic' }}>
+            Ingen risikosamlinger ennå. Gå til Samlinger og opprett den første.
+          </div>
+        ) : collections.map((col, idx) => {
+          const sevs = col.risks.map(r => getSev(r.p,r.c));
+          const worstSev = ['critical','high','medium','low'].find(s => sevs.includes(s));
+          const openM = col.risks.reduce((s,r) => s + r.mitigations.filter(m => !m.done).length, 0);
+          return (
+            <div
+              key={col.id}
+              style={{ display:'flex', alignItems:'center', padding:'14px 20px', borderBottom: idx < collections.length - 1 ? '1px solid var(--rule)' : 'none', cursor:'pointer', transition:'background 80ms' }}
+              onMouseEnter={e => e.currentTarget.style.background='var(--bg-raised)'}
+              onMouseLeave={e => e.currentTarget.style.background=''}
+              onClick={() => { setSelectedCollectionId(col.id); setView('collection'); }}
+            >
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:500, fontSize:14 }}>{col.name}</div>
+                <div style={{ fontSize:12, color:'var(--ink-2)', marginTop:2 }}>{col.owner} · {col.period} · {col.risks.length} risikoer</div>
+              </div>
+              <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+                {worstSev && <SevPill sev={worstSev} />}
+                {openM > 0 && <span style={{ fontSize:12, color:'var(--amber)', fontFamily:'var(--font-mono)' }}>{openM} åpne tiltak</span>}
+                <Icon name="forward" size={14} color="var(--ink-3)" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISNING: SAMLINGER
+═══════════════════════════════════════════════════════════════ */
+
+function CollectionsView({ collections, onSelect, onAdd, onDelete }) {
+  return (
+    <div className="app-page">
+      <header className="page-head">
+        <div className="page-title-block">
+          <div className="rips-cap">Workspace</div>
+          <h1 className="page-title">Risikosamlinger</h1>
+        </div>
+        <button className="rips-btn" onClick={onAdd}>
+          <Icon name="plus" size={14} /> Ny samling
+        </button>
+      </header>
+
+      {collections.length === 0 ? (
+        <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, padding:'60px 24px', textAlign:'center' }}>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:26, color:'var(--ink-2)', marginBottom:14, fontStyle:'italic' }}>Ingen samlinger ennå</div>
+          <p style={{ fontSize:14, color:'var(--ink-2)', marginBottom:20 }}>Opprett den første risikosamlingen for å komme i gang.</p>
+          <button className="rips-btn" onClick={onAdd}><Icon name="plus" size={14} /> Ny samling</button>
+        </div>
+      ) : (
+        <table className="rips-table">
+          <thead>
+            <tr>
+              <th>Navn</th>
+              <th style={{ width:130 }}>Eier</th>
+              <th style={{ width:100 }}>Periode</th>
+              <th style={{ width:90, textAlign:'center' }}>Risikoer</th>
+              <th style={{ width:120 }}>Høyeste alvor</th>
+              <th style={{ width:110, textAlign:'center' }}>Åpne tiltak</th>
+              <th style={{ width:50 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {collections.map(col => {
+              const sevs = col.risks.map(r => getSev(r.p,r.c));
+              const worstSev = ['critical','high','medium','low'].find(s => sevs.includes(s));
+              const openMits = col.risks.reduce((s,r) => s + r.mitigations.filter(m => !m.done).length, 0);
+              return (
+                <tr key={col.id} onClick={() => onSelect(col.id)}>
+                  <td>
+                    <div style={{ fontWeight:500 }}>{col.name}</div>
+                    {col.description && <div style={{ fontSize:12, color:'var(--ink-2)', marginTop:2 }}>{col.description.length > 70 ? col.description.slice(0,70)+'…' : col.description}</div>}
+                  </td>
+                  <td>{col.owner}</td>
+                  <td className="muted">{col.period || '—'}</td>
+                  <td className="mono" style={{ textAlign:'center' }}>{col.risks.length}</td>
+                  <td>{worstSev ? <SevPill sev={worstSev} /> : <span style={{ color:'var(--ink-3)', fontSize:12 }}>—</span>}</td>
+                  <td className="mono" style={{ textAlign:'center', color: openMits > 0 ? 'var(--amber)' : col.risks.length > 0 ? 'var(--leaf)' : 'var(--ink-3)' }}>
+                    {col.risks.length === 0 ? '—' : openMits > 0 ? openMits : 'Alle lukket'}
+                  </td>
+                  <td style={{ textAlign:'center' }} onClick={e => { e.stopPropagation(); if (confirm(`Slett "${col.name}"?`)) onDelete(col.id); }}>
+                    <span style={{ color:'var(--ink-3)', cursor:'pointer', display:'inline-flex' }}><Icon name="trash" size={14} /></span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VISNING: SAMLING (med matrise og tabell)
+═══════════════════════════════════════════════════════════════ */
+
+function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk }) {
+  const [openRiskId,  setOpenRiskId]  = useState(null);
+  const [showAddRisk, setShowAddRisk] = useState(false);
+
+  const openRisk  = collection.risks.find(r => r.id === openRiskId);
+  const sevCounts = collection.risks.reduce((acc, r) => {
+    const s = getSev(r.p, r.c);
+    acc[s] = (acc[s] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <>
+      <div className="app-page">
+        <header className="page-head">
+          <div>
+            <button
+              className="rips-btn-ghost"
+              style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:13, color:'var(--ink-2)', padding:'4px 8px 4px 4px', marginBottom:10 }}
+              onClick={onBack}
+            >
+              <Icon name="back" size={14} /> Alle samlinger
+            </button>
+            <div className="page-title-block">
+              <div className="rips-cap">{collection.owner}{collection.period ? ` · ${collection.period}` : ''}</div>
+              <h1 className="page-title">{collection.name}</h1>
+            </div>
+          </div>
+          <button className="rips-btn" onClick={() => setShowAddRisk(true)}>
+            <Icon name="plus" size={14} /> Ny risiko
+          </button>
+        </header>
+
+        {collection.description && (
+          <p style={{ fontSize:14, color:'var(--ink-2)', margin:'0 0 24px', maxWidth:640 }}>{collection.description}</p>
+        )}
+
+        {collection.risks.length > 0 && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 200px', gap:20, marginBottom:28, alignItems:'start' }}>
+            {/* Risikomatrise */}
+            <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, padding:20 }}>
+              <div className="rips-cap" style={{ marginBottom:14 }}>Risikomatrise — sannsynlighet × konsekvens</div>
+              <RiskMatrix risks={collection.risks} onRiskClick={id => setOpenRiskId(id)} />
+              <div style={{ display:'flex', gap:20, marginTop:14, flexWrap:'wrap' }}>
+                {['low','medium','high','critical'].map(s => (
+                  <div key={s} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink-2)' }}>
+                    <span style={{ width:9, height:9, borderRadius:'50%', background:SEV_DOT[s], display:'inline-block' }}></span>
+                    {SEV_LABEL[s]} ({sevCounts[s] || 0})
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Alvor-fordeling */}
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {['critical','high','medium','low'].map(s => (
+                <div key={s} style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, padding:'12px 16px' }}>
+                  <div className="rips-cap" style={{ marginBottom:4 }}>{SEV_LABEL[s]}</div>
+                  <div style={{ fontFamily:'var(--font-display)', fontSize:32, lineHeight:1, letterSpacing:'-0.015em', color:SEV_DOT[s] }}>
+                    {sevCounts[s] || 0}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Risikotabell */}
+        {collection.risks.length === 0 ? (
+          <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, padding:'56px 24px', textAlign:'center' }}>
+            <div style={{ fontFamily:'var(--font-display)', fontSize:24, color:'var(--ink-2)', marginBottom:12, fontStyle:'italic' }}>Ingen risikoer ennå</div>
+            <p style={{ fontSize:14, color:'var(--ink-2)', marginBottom:20 }}>Legg til den første risikoen for å begynne.</p>
+            <button className="rips-btn" onClick={() => setShowAddRisk(true)}><Icon name="plus" size={14} /> Legg til risiko</button>
+          </div>
+        ) : (
+          <>
+            <div className="table-toolbar">
+              <div className="left">
+                {['critical','high','medium','low'].map(s => sevCounts[s] ? (
+                  <span key={s} className="chip">
+                    <span style={{ width:7, height:7, borderRadius:'50%', background:SEV_DOT[s], display:'inline-block' }}></span>
+                    {SEV_LABEL[s]}: {sevCounts[s]}
+                  </span>
+                ) : null)}
+              </div>
+              <span style={{ color:'var(--ink-2)', fontSize:12, fontFamily:'var(--font-mono)' }}>
+                {collection.risks.length} risikoer
+              </span>
+            </div>
+            <RiskTable risks={collection.risks} onOpen={id => setOpenRiskId(id)} />
+          </>
+        )}
+      </div>
+
+      {openRisk && (
+        <RiskDrawer
+          risk={openRisk}
+          onClose={() => setOpenRiskId(null)}
+          onUpdate={updated => { onUpdateRisk(updated); }}
+          onDelete={id => { onDeleteRisk(id); setOpenRiskId(null); }}
+        />
+      )}
+
+      {showAddRisk && (
+        <AddRiskModal
+          onClose={() => setShowAddRisk(false)}
+          onAdd={risk => { onAddRisk(risk); setShowAddRisk(false); }}
+        />
+      )}
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   APP SHELL (autentisert)
+═══════════════════════════════════════════════════════════════ */
+
+function AppShell({ user, onLogout }) {
+  const [view,       setViewRaw]           = useState('dashboard');
+  const [collections, setCollections]      = useState(INITIAL_COLLECTIONS);
+  const [selectedId, setSelectedId]        = useState(null);
+  const [showAddCol, setShowAddCol]        = useState(false);
+
+  const setView = (v) => {
+    setViewRaw(v);
+    if (v !== 'collection') setSelectedId(null);
+  };
+
+  const selectedCollection = collections.find(c => c.id === selectedId);
+
+  const crumbs =
+    view === 'dashboard'   ? ['Workspace', 'Oversikt'] :
+    view === 'collections' ? ['Workspace', 'Samlinger'] :
+    ['Workspace', 'Samlinger', selectedCollection?.name || '…'];
+
+  const addCollection = (col) => setCollections(prev => [...prev, col]);
+  const deleteCollection = (id) => {
+    setCollections(prev => prev.filter(c => c.id !== id));
+    if (selectedId === id) setView('collections');
+  };
+
+  const addRisk = (risk) => {
+    setCollections(prev => prev.map(c => c.id === selectedId ? { ...c, risks: [...c.risks, risk] } : c));
+  };
+  const updateRisk = (updated) => {
+    setCollections(prev => prev.map(c => c.id === selectedId ? { ...c, risks: c.risks.map(r => r.id === updated.id ? updated : r) } : c));
+  };
+  const deleteRisk = (riskId) => {
+    setCollections(prev => prev.map(c => c.id === selectedId ? { ...c, risks: c.risks.filter(r => r.id !== riskId) } : c));
+  };
+
+  return (
+    <div className="app-shell">
+      <Sidebar
+        view={view}
+        setView={setView}
+        collections={collections}
+        user={user}
+        onLogout={onLogout}
+      />
+      <main className="app-main">
+        <TopBar crumbs={crumbs} user={user} />
+
+        {view === 'dashboard' && (
+          <DashboardView
+            collections={collections}
+            setView={setViewRaw}
+            setSelectedCollectionId={setSelectedId}
+          />
+        )}
+        {view === 'collections' && (
+          <CollectionsView
+            collections={collections}
+            onSelect={id => { setSelectedId(id); setViewRaw('collection'); }}
+            onAdd={() => setShowAddCol(true)}
+            onDelete={deleteCollection}
+          />
+        )}
+        {view === 'collection' && selectedCollection && (
+          <CollectionView
+            collection={selectedCollection}
+            onBack={() => setView('collections')}
+            onAddRisk={addRisk}
+            onUpdateRisk={updateRisk}
+            onDeleteRisk={deleteRisk}
+          />
+        )}
+      </main>
+
+      {showAddCol && (
+        <AddCollectionModal
+          onClose={() => setShowAddCol(false)}
+          onAdd={col => { addCollection(col); setShowAddCol(false); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   APP ROT
+═══════════════════════════════════════════════════════════════ */
+
+function App() {
+  const [screen, setScreen] = useState('welcome');
+  const [user,   setUser]   = useState(null);
+
+  if (screen === 'welcome') {
+    return <WelcomePage onLogin={() => setScreen('login')} />;
+  }
+  if (screen === 'login') {
+    return (
+      <LoginPage
+        onSuccess={u => { setUser(u); setScreen('app'); }}
+        onBack={() => setScreen('welcome')}
+      />
+    );
+  }
+  return <AppShell user={user} onLogout={() => { setUser(null); setScreen('welcome'); }} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
