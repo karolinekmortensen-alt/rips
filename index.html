@@ -19,20 +19,25 @@ const { useState } = React;
    KONSTANTER OG DATA
 ═══════════════════════════════════════════════════════════════ */
 
-const PROB_LABELS = { 1: 'Svært liten', 2: 'Liten', 3: 'Moderat', 4: 'Stor', 5: 'Svært stor' };
-const CONS_LABELS = { 1: 'Ubetydelig', 2: 'Lav', 3: 'Moderat', 4: 'Alvorlig', 5: 'Kritisk' };
+const PROB_LABELS = {
+  1:'Svært liten', 2:'Liten',        3:'Lav',          4:'Under middels', 5:'Moderat',
+  6:'Over middels', 7:'Stor',        8:'Høy',           9:'Svært stor',    10:'Nesten sikkert',
+};
+const CONS_LABELS = {
+  1:'Ubetydelig',  2:'Liten',        3:'Lav',          4:'Under middels', 5:'Moderat',
+  6:'Over middels', 7:'Alvorlig',    8:'Kritisk',       9:'Svært alvorlig',10:'Katastrofalt',
+};
 const CATEGORIES  = ['IT-sikkerhet','Operasjonell','Finansiell','Compliance','HR','Prosjekt','Strategisk'];
 const SEV_LABEL   = { low: 'Lav', medium: 'Moderat', high: 'Høy', critical: 'Kritisk' };
 
-// Standard 5×5 risikomatrise (norsk trafikklys-modell)
-const ZONE_MAP = [
-  ['low','low','low','medium','medium'],          // c=1
-  ['low','low','medium','medium','high'],          // c=2
-  ['low','medium','medium','high','high'],         // c=3
-  ['low','medium','high','high','critical'],       // c=4
-  ['medium','high','high','critical','critical'],  // c=5
-];
-const getSev = (p, c) => ZONE_MAP[c - 1][p - 1];
+// Alvor beregnes proporsjonalt: score / maxScore med fire soner
+const getSev = (p, c, scale = 5) => {
+  const ratio = (p * c) / (scale * scale);
+  if (ratio <= 0.16) return 'low';
+  if (ratio <= 0.36) return 'medium';
+  if (ratio <= 0.64) return 'high';
+  return 'critical';
+};
 
 const ZONE_BG  = { low: '#DDE7D5', medium: '#F5E5C3', high: '#F3D9DD', critical: '#E4A5AE' };
 const SEV_DOT  = { low: '#2F5236', medium: '#B8761C', high: '#B11E3A', critical: '#7A1226' };
@@ -50,7 +55,7 @@ const INITIAL_COLLECTIONS = [
   {
     id: 'C-0001', name: 'IT-sikkerhet 2026',
     description: 'Informasjonssikkerhet og databehandling for Sparebank Vest.',
-    owner: 'Jonas Vik', period: 'Q2 2026',
+    owner: 'Jonas Vik', period: 'Q2 2026', scale: 5,
     risks: [
       { id:'R-0001', title:'Datalekkasje, kundedata',
         description:'Penetrasjonstest avdekket utdatert tilgangskontroll på lese-replika. Eksponering ville rammet GDPR.',
@@ -83,7 +88,7 @@ const INITIAL_COLLECTIONS = [
   {
     id: 'C-0002', name: 'Operasjonell risiko 2026',
     description: 'Operasjonell risiko for kjernevirksomheten.',
-    owner: 'Mari Røst', period: 'Q3 2026',
+    owner: 'Mari Røst', period: 'Q3 2026', scale: 5,
     risks: [
       { id:'R-0010', title:'Leverandørmislighold, hovedrammeavtale',
         description:'Sannsynlighet for mislighold økt etter Q2-resultater til hovedleverandør.',
@@ -107,7 +112,7 @@ const INITIAL_COLLECTIONS = [
   {
     id: 'C-0003', name: 'Compliance 2026',
     description: 'Etterlevelse av regelverk og internkontroll.',
-    owner: 'Petter Lo', period: 'Q3 2026',
+    owner: 'Petter Lo', period: 'Q3 2026', scale: 5,
     risks: [
       { id:'R-0020', title:'Endring i hvitvaskingsregelverk',
         description:'Nye KYC-krav fra Finanstilsynet trer i kraft 1. oktober.',
@@ -333,16 +338,24 @@ function TopBar({ crumbs, user }) {
    RISIKOMATRISE (SVG 5×5)
 ═══════════════════════════════════════════════════════════════ */
 
-function RiskMatrix({ risks, onRiskClick }) {
+function RiskMatrix({ risks, onRiskClick, scale = 5 }) {
   const [hovered, setHovered] = useState(null);
+  const n = scale;
 
+  // Fixed grid area; cells shrink as scale grows
   const ML = 66, MR = 16, MT = 16, MB = 54;
-  const CW = 76, CH = 54;
-  const W  = ML + 5 * CW + MR;   // 462
-  const H  = MT + 5 * CH + MB;   // 340
+  const GRID_W = 400, GRID_H = 290;
+  const CW = GRID_W / n;
+  const CH = GRID_H / n;
+  const W  = ML + GRID_W + MR;
+  const H  = MT + GRID_H + MB;
+  const dotR = Math.max(5, Math.min(10, CW * 0.22));
+  const lblSize = Math.max(8, Math.min(11, 11 * 5 / n));
 
   const cx = (p) => ML + (p - 1) * CW + CW / 2;
-  const cy = (c) => MT + (5 - c) * CH + CH / 2;
+  const cy = (c) => MT + (n - c) * CH + CH / 2;
+
+  const ticks = Array.from({ length: n }, (_, i) => i + 1);
 
   // Group risks at same cell
   const groups = {};
@@ -353,53 +366,42 @@ function RiskMatrix({ risks, onRiskClick }) {
   });
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      width="100%"
-      style={{ display:'block', maxWidth: W }}
-    >
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display:'block', maxWidth: W }}>
       {/* Background cells */}
-      {[1,2,3,4,5].flatMap(c =>
-        [1,2,3,4,5].map(p => (
+      {ticks.flatMap(c =>
+        ticks.map(p => (
           <rect
             key={`bg-${p}-${c}`}
-            x={ML + (p-1)*CW} y={MT + (5-c)*CH}
+            x={ML + (p-1)*CW} y={MT + (n-c)*CH}
             width={CW} height={CH}
-            fill={ZONE_BG[getSev(p, c)]}
+            fill={ZONE_BG[getSev(p, c, n)]}
             stroke="rgba(255,255,255,0.7)" strokeWidth={1}
           />
         ))
       )}
 
       {/* Outer border */}
-      <rect x={ML} y={MT} width={5*CW} height={5*CH} fill="none" stroke="var(--rule-strong)" strokeWidth={1} />
+      <rect x={ML} y={MT} width={GRID_W} height={GRID_H} fill="none" stroke="var(--rule-strong)" strokeWidth={1} />
 
       {/* X-axis tick labels */}
-      {[1,2,3,4,5].map(p => (
-        <text key={`xl-${p}`} x={cx(p)} y={H - MB + 18} textAnchor="middle" fontSize={11} fill="#5C544A" fontFamily="Geist,system-ui">
-          {p}
-        </text>
+      {ticks.map(p => (
+        <text key={`xl-${p}`} x={cx(p)} y={H - MB + 16} textAnchor="middle" fontSize={lblSize} fill="#5C544A" fontFamily="Geist,system-ui">{p}</text>
       ))}
-      {/* X-axis sub-labels */}
-      {[1,2,3,4,5].map(p => (
-        <text key={`xs-${p}`} x={cx(p)} y={H - MB + 32} textAnchor="middle" fontSize={9.5} fill="#8A8275" fontFamily="Geist,system-ui">
+      {/* X-axis sub-labels — only show for scale ≤ 6 to avoid crowding */}
+      {n <= 6 && ticks.map(p => (
+        <text key={`xs-${p}`} x={cx(p)} y={H - MB + 30} textAnchor="middle" fontSize={Math.max(7, lblSize - 2)} fill="#8A8275" fontFamily="Geist,system-ui">
           {PROB_LABELS[p].split(' ')[0]}
         </text>
       ))}
-      <text x={ML + 5*CW/2} y={H - 4} textAnchor="middle" fontSize={10} fill="#8A8275" fontFamily="Geist,system-ui" letterSpacing="0.06em">
+      <text x={ML + GRID_W/2} y={H - 4} textAnchor="middle" fontSize={10} fill="#8A8275" fontFamily="Geist,system-ui" letterSpacing="0.06em">
         SANNSYNLIGHET
       </text>
 
       {/* Y-axis tick labels */}
-      {[1,2,3,4,5].map(c => (
-        <text key={`yl-${c}`} x={ML - 8} y={cy(c) + 4} textAnchor="end" fontSize={11} fill="#5C544A" fontFamily="Geist,system-ui">
-          {c}
-        </text>
+      {ticks.map(c => (
+        <text key={`yl-${c}`} x={ML - 8} y={cy(c) + 4} textAnchor="end" fontSize={lblSize} fill="#5C544A" fontFamily="Geist,system-ui">{c}</text>
       ))}
-      <text
-        transform={`translate(13,${MT + 5*CH/2}) rotate(-90)`}
-        textAnchor="middle" fontSize={10} fill="#8A8275" fontFamily="Geist,system-ui" letterSpacing="0.06em"
-      >
+      <text transform={`translate(13,${MT + GRID_H/2}) rotate(-90)`} textAnchor="middle" fontSize={10} fill="#8A8275" fontFamily="Geist,system-ui" letterSpacing="0.06em">
         KONSEKVENS
       </text>
 
@@ -407,31 +409,25 @@ function RiskMatrix({ risks, onRiskClick }) {
       {Object.entries(groups).map(([key, grp]) => {
         const [p, c] = key.split(',').map(Number);
         return grp.map((r, idx) => {
-          const sev = getSev(r.p, r.c);
-          const offset = grp.length > 1 ? (idx - (grp.length - 1) / 2) * 18 : 0;
+          const sev = getSev(r.p, r.c, n);
+          const offset = grp.length > 1 ? (idx - (grp.length - 1) / 2) * (dotR * 2 + 2) : 0;
           const dotX = cx(p) + offset;
           const dotY = cy(c);
           const isHov = hovered?.id === r.id;
           return (
-            <g
-              key={r.id}
-              style={{ cursor:'pointer' }}
-              onClick={() => onRiskClick(r.id)}
-              onMouseEnter={() => setHovered(r)}
-              onMouseLeave={() => setHovered(null)}
-            >
-              <circle cx={dotX} cy={dotY} r={isHov ? 12 : 10} fill={SEV_DOT[sev]} stroke="white" strokeWidth={1.5} opacity={hovered && !isHov ? 0.45 : 1} style={{ transition:'r 80ms, opacity 80ms' }} />
+            <g key={r.id} style={{ cursor:'pointer' }} onClick={() => onRiskClick(r.id)} onMouseEnter={() => setHovered(r)} onMouseLeave={() => setHovered(null)}>
+              <circle cx={dotX} cy={dotY} r={isHov ? dotR + 2 : dotR} fill={SEV_DOT[sev]} stroke="white" strokeWidth={1.5} opacity={hovered && !isHov ? 0.45 : 1} style={{ transition:'r 80ms, opacity 80ms' }} />
             </g>
           );
         });
       })}
 
-      {/* Tooltip (SVG-native, rendered above dots) */}
+      {/* Tooltip */}
       {hovered && (() => {
-        const sev = getSev(hovered.p, hovered.c);
+        const sev = getSev(hovered.p, hovered.c, n);
         const tipW = 206, tipH = 50;
         const rawX = cx(hovered.p) - tipW / 2;
-        const rawY = cy(hovered.c) > MT + CH * 2 ? cy(hovered.c) - tipH - 14 : cy(hovered.c) + 16;
+        const rawY = cy(hovered.c) > MT + GRID_H / 2 ? cy(hovered.c) - tipH - 14 : cy(hovered.c) + dotR + 6;
         const tipX = Math.max(ML, Math.min(rawX, W - MR - tipW));
         return (
           <g pointerEvents="none">
@@ -453,7 +449,7 @@ function RiskMatrix({ risks, onRiskClick }) {
    RISIKOTABELL
 ═══════════════════════════════════════════════════════════════ */
 
-function RiskTable({ risks, onOpen }) {
+function RiskTable({ risks, onOpen, scale = 5 }) {
   return (
     <table className="rips-table">
       <thead>
@@ -470,7 +466,7 @@ function RiskTable({ risks, onOpen }) {
       </thead>
       <tbody>
         {risks.map(r => {
-          const sev = getSev(r.p, r.c);
+          const sev = getSev(r.p, r.c, scale);
           const done = r.mitigations.filter(m => m.done).length;
           const total = r.mitigations.length;
           return (
@@ -501,13 +497,13 @@ function RiskTable({ risks, onOpen }) {
    RISIKOSKUFF (DRAWER)
 ═══════════════════════════════════════════════════════════════ */
 
-function RiskDrawer({ risk, onClose, onUpdate, onDelete }) {
+function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5 }) {
   const [addingMit, setAddingMit] = useState(false);
   const [mitLabel, setMitLabel]   = useState('');
   const [mitDue, setMitDue]       = useState('');
 
   if (!risk) return null;
-  const sev = getSev(risk.p, risk.c);
+  const sev = getSev(risk.p, risk.c, scale);
 
   const toggleMit = (id) => {
     onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === id ? { ...m, done: !m.done } : m) });
@@ -652,11 +648,12 @@ function AddCollectionModal({ onClose, onAdd }) {
   const [desc,   setDesc]   = useState('');
   const [owner,  setOwner]  = useState('');
   const [period, setPeriod] = useState('');
+  const [scale,  setScale]  = useState(5);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!name.trim() || !owner.trim()) return;
-    onAdd({ id: uid('C'), name: name.trim(), description: desc.trim(), owner: owner.trim(), period: period.trim(), risks: [] });
+    onAdd({ id: uid('C'), name: name.trim(), description: desc.trim(), owner: owner.trim(), period: period.trim(), scale: Number(scale), risks: [] });
     onClose();
   };
 
@@ -676,7 +673,7 @@ function AddCollectionModal({ onClose, onAdd }) {
             <label className="form-label">Beskrivelse</label>
             <textarea className="rips-input" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Kort beskrivelse av hva samlingen dekker…" rows={3} />
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14 }}>
             <div className="form-group">
               <label className="form-label">Eier *</label>
               <input className="rips-input" value={owner} onChange={e => setOwner(e.target.value)} placeholder="Fornavn Etternavn" required />
@@ -684,6 +681,13 @@ function AddCollectionModal({ onClose, onAdd }) {
             <div className="form-group">
               <label className="form-label">Periode</label>
               <input className="rips-input" value={period} onChange={e => setPeriod(e.target.value)} placeholder="Q3 2026" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Skala (1–n)</label>
+              <select className="rips-input rips-select" value={scale} onChange={e => setScale(Number(e.target.value))}>
+                {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}×{n}</option>)}
+              </select>
+              <span style={{ fontSize:11, color:'var(--ink-3)', marginTop:3 }}>Standard er 5×5</span>
             </div>
           </div>
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end', paddingTop:4 }}>
@@ -700,15 +704,16 @@ function AddCollectionModal({ onClose, onAdd }) {
    MODAL: NY RISIKO
 ═══════════════════════════════════════════════════════════════ */
 
-function AddRiskModal({ onClose, onAdd }) {
+function AddRiskModal({ onClose, onAdd, scale = 5 }) {
   const [title, setTitle] = useState('');
   const [owner, setOwner] = useState('');
   const [cat,   setCat]   = useState('IT-sikkerhet');
-  const [p,     setP]     = useState(3);
-  const [c,     setC]     = useState(3);
+  const [p,     setP]     = useState(Math.ceil(scale / 2));
+  const [c,     setC]     = useState(Math.ceil(scale / 2));
   const [desc,  setDesc]  = useState('');
 
-  const previewSev = getSev(Number(p), Number(c));
+  const ticks = Array.from({ length: scale }, (_, i) => i + 1);
+  const previewSev = getSev(Number(p), Number(c), scale);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -743,15 +748,15 @@ function AddRiskModal({ onClose, onAdd }) {
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14, alignItems:'start' }}>
             <div className="form-group">
-              <label className="form-label">Sannsynlighet (1–5)</label>
+              <label className="form-label">Sannsynlighet (1–{scale})</label>
               <select className="rips-input rips-select" value={p} onChange={e => setP(Number(e.target.value))}>
-                {[1,2,3,4,5].map(v => <option key={v} value={v}>{v} — {PROB_LABELS[v]}</option>)}
+                {ticks.map(v => <option key={v} value={v}>{v} — {PROB_LABELS[v]}</option>)}
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label">Konsekvens (1–5)</label>
+              <label className="form-label">Konsekvens (1–{scale})</label>
               <select className="rips-input rips-select" value={c} onChange={e => setC(Number(e.target.value))}>
-                {[1,2,3,4,5].map(v => <option key={v} value={v}>{v} — {CONS_LABELS[v]}</option>)}
+                {ticks.map(v => <option key={v} value={v}>{v} — {CONS_LABELS[v]}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -777,10 +782,10 @@ function AddRiskModal({ onClose, onAdd }) {
    VISNING: DASHBOARD
 ═══════════════════════════════════════════════════════════════ */
 
-function DashboardView({ collections, setView, setSelectedCollectionId }) {
+function DashboardView({ collections, setView, setSelectedCollectionId, onAddCollection }) {
   const totalRisks = collections.reduce((s,c) => s + c.risks.length, 0);
-  const highOrCrit = collections.reduce((s,c) => s + c.risks.filter(r => ['high','critical'].includes(getSev(r.p,r.c))).length, 0);
-  const critCount  = collections.reduce((s,c) => s + c.risks.filter(r => getSev(r.p,r.c) === 'critical').length, 0);
+  const highOrCrit = collections.reduce((s,col) => s + col.risks.filter(r => ['high','critical'].includes(getSev(r.p,r.c,col.scale||5))).length, 0);
+  const critCount  = collections.reduce((s,col) => s + col.risks.filter(r => getSev(r.p,r.c,col.scale||5) === 'critical').length, 0);
   const openMits   = collections.reduce((s,c) => s + c.risks.reduce((s2,r) => s2 + r.mitigations.filter(m => !m.done).length, 0), 0);
 
   const kpis = [
@@ -797,6 +802,9 @@ function DashboardView({ collections, setView, setSelectedCollectionId }) {
           <div className="rips-cap">Dashboard · {new Date().getFullYear()}</div>
           <h1 className="page-title">Oversikt, <em>som det står nå</em></h1>
         </div>
+        <button className="rips-btn" onClick={onAddCollection}>
+          <Icon name="plus" size={14} /> Ny samling
+        </button>
       </header>
 
       <section className="rips-kpis" style={{ marginBottom:28 }}>
@@ -816,7 +824,7 @@ function DashboardView({ collections, setView, setSelectedCollectionId }) {
             Ingen risikosamlinger ennå. Gå til Samlinger og opprett den første.
           </div>
         ) : collections.map((col, idx) => {
-          const sevs = col.risks.map(r => getSev(r.p,r.c));
+          const sevs = col.risks.map(r => getSev(r.p,r.c,col.scale||5));
           const worstSev = ['critical','high','medium','low'].find(s => sevs.includes(s));
           const openM = col.risks.reduce((s,r) => s + r.mitigations.filter(m => !m.done).length, 0);
           return (
@@ -882,7 +890,7 @@ function CollectionsView({ collections, onSelect, onAdd, onDelete }) {
           </thead>
           <tbody>
             {collections.map(col => {
-              const sevs = col.risks.map(r => getSev(r.p,r.c));
+              const sevs = col.risks.map(r => getSev(r.p,r.c,col.scale||5));
               const worstSev = ['critical','high','medium','low'].find(s => sevs.includes(s));
               const openMits = col.risks.reduce((s,r) => s + r.mitigations.filter(m => !m.done).length, 0);
               return (
@@ -915,13 +923,14 @@ function CollectionsView({ collections, onSelect, onAdd, onDelete }) {
    VISNING: SAMLING (med matrise og tabell)
 ═══════════════════════════════════════════════════════════════ */
 
-function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk }) {
+function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateScale }) {
   const [openRiskId,  setOpenRiskId]  = useState(null);
   const [showAddRisk, setShowAddRisk] = useState(false);
+  const scale = collection.scale || 5;
 
   const openRisk  = collection.risks.find(r => r.id === openRiskId);
   const sevCounts = collection.risks.reduce((acc, r) => {
-    const s = getSev(r.p, r.c);
+    const s = getSev(r.p, r.c, scale);
     acc[s] = (acc[s] || 0) + 1;
     return acc;
   }, {});
@@ -943,9 +952,23 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
               <h1 className="page-title">{collection.name}</h1>
             </div>
           </div>
-          <button className="rips-btn" onClick={() => setShowAddRisk(true)}>
-            <Icon name="plus" size={14} /> Ny risiko
-          </button>
+          <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+              <span className="rips-cap">Skala</span>
+              <select
+                className="rips-input rips-select"
+                style={{ width:90, height:32, fontSize:13, padding:'0 28px 0 10px' }}
+                value={scale}
+                onChange={e => onUpdateScale(Number(e.target.value))}
+                title="Endre skalanivå for denne samlingen"
+              >
+                {[2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}×{n}</option>)}
+              </select>
+            </div>
+            <button className="rips-btn" onClick={() => setShowAddRisk(true)}>
+              <Icon name="plus" size={14} /> Ny risiko
+            </button>
+          </div>
         </header>
 
         {collection.description && (
@@ -956,8 +979,8 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           <div style={{ display:'grid', gridTemplateColumns:'1fr 200px', gap:20, marginBottom:28, alignItems:'start' }}>
             {/* Risikomatrise */}
             <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, padding:20 }}>
-              <div className="rips-cap" style={{ marginBottom:14 }}>Risikomatrise — sannsynlighet × konsekvens</div>
-              <RiskMatrix risks={collection.risks} onRiskClick={id => setOpenRiskId(id)} />
+              <div className="rips-cap" style={{ marginBottom:14 }}>Risikomatrise — sannsynlighet × konsekvens ({scale}×{scale})</div>
+              <RiskMatrix risks={collection.risks} onRiskClick={id => setOpenRiskId(id)} scale={scale} />
               <div style={{ display:'flex', gap:20, marginTop:14, flexWrap:'wrap' }}>
                 {['low','medium','high','critical'].map(s => (
                   <div key={s} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink-2)' }}>
@@ -1004,7 +1027,7 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
                 {collection.risks.length} risikoer
               </span>
             </div>
-            <RiskTable risks={collection.risks} onOpen={id => setOpenRiskId(id)} />
+            <RiskTable risks={collection.risks} onOpen={id => setOpenRiskId(id)} scale={scale} />
           </>
         )}
       </div>
@@ -1015,6 +1038,7 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           onClose={() => setOpenRiskId(null)}
           onUpdate={updated => { onUpdateRisk(updated); }}
           onDelete={id => { onDeleteRisk(id); setOpenRiskId(null); }}
+          scale={scale}
         />
       )}
 
@@ -1022,6 +1046,7 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
         <AddRiskModal
           onClose={() => setShowAddRisk(false)}
           onAdd={risk => { onAddRisk(risk); setShowAddRisk(false); }}
+          scale={scale}
         />
       )}
     </>
@@ -1065,6 +1090,14 @@ function AppShell({ user, onLogout }) {
   const deleteRisk = (riskId) => {
     setCollections(prev => prev.map(c => c.id === selectedId ? { ...c, risks: c.risks.filter(r => r.id !== riskId) } : c));
   };
+  const updateCollectionScale = (newScale) => {
+    setCollections(prev => prev.map(col => {
+      if (col.id !== selectedId) return col;
+      // Cap all risk values to the new scale if scale is reduced
+      const risks = col.risks.map(r => ({ ...r, p: Math.min(r.p, newScale), c: Math.min(r.c, newScale) }));
+      return { ...col, scale: newScale, risks };
+    }));
+  };
 
   return (
     <div className="app-shell">
@@ -1083,6 +1116,7 @@ function AppShell({ user, onLogout }) {
             collections={collections}
             setView={setViewRaw}
             setSelectedCollectionId={setSelectedId}
+            onAddCollection={() => setShowAddCol(true)}
           />
         )}
         {view === 'collections' && (
@@ -1100,6 +1134,7 @@ function AppShell({ user, onLogout }) {
             onAddRisk={addRisk}
             onUpdateRisk={updateRisk}
             onDeleteRisk={deleteRisk}
+            onUpdateScale={updateCollectionScale}
           />
         )}
       </main>
