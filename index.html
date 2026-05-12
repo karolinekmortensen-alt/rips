@@ -9,11 +9,22 @@
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
+
+/* ═══════════════════════════════════════════════════════════════
+   SUPABASE — fyll inn URL og anon-nøkkel fra ditt prosjekt
+═══════════════════════════════════════════════════════════════ */
+const SUPABASE_URL      = 'https://DIN_PROSJEKT_ID.supabase.co';
+const SUPABASE_ANON_KEY = 'DIN_ANON_NØKKEL';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Henter visningsnavn fra Supabase-brukerobjekt
+const getUserName = (u) => u?.user_metadata?.full_name || u?.email?.split('@')[0] || 'Bruker';
 
 /* ═══════════════════════════════════════════════════════════════
    KONSTANTER OG DATA
@@ -300,48 +311,80 @@ function WelcomePage({ onLogin }) {
    PÅLOGGINGSSIDE
 ═══════════════════════════════════════════════════════════════ */
 
-function LoginPage({ onSuccess, onBack }) {
-  const [username, setUsername] = useState('');
+function LoginPage({ onBack }) {
+  const [mode,     setMode]     = useState('login'); // 'login' | 'signup'
+  const [email,    setEmail]    = useState('');
+  const [name,     setName]     = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error,    setError]    = useState('');
+  const [info,     setInfo]     = useState('');
+  const [loading,  setLoading]  = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username.trim()) { setError('Brukernavn er påkrevd.'); return; }
-    if (!password.trim()) { setError('Passord er påkrevd.'); return; }
-    onSuccess({ name: username.trim() });
+    setError(''); setInfo(''); setLoading(true);
+    try {
+      if (mode === 'login') {
+        const { error } = await db.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        // App component listens to onAuthStateChange — no need to call onSuccess
+      } else {
+        const { data, error } = await db.auth.signUp({
+          email, password,
+          options: { data: { full_name: name.trim() || email.split('@')[0] } },
+        });
+        if (error) throw error;
+        if (data.user && !data.session) {
+          setInfo('Sjekk e-posten din og klikk bekreftelseslenken, så kan du logge inn.');
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="login-page">
-      <button
-        className="rips-btn-ghost"
-        style={{ position:'absolute', top:24, left:24, display:'flex', alignItems:'center', gap:6, fontSize:13 }}
-        onClick={onBack}
-      >
+      <button className="rips-btn-ghost" style={{ position:'absolute', top:24, left:24, display:'flex', alignItems:'center', gap:6, fontSize:13 }} onClick={onBack}>
         <Icon name="back" size={14} /> Tilbake
       </button>
       <div className="login-card">
-        <div style={{ textAlign:'center', marginBottom:28 }}>
-          <RipsLogo size={38} bg="var(--paper)" />
-        </div>
-        <h2 style={{ fontSize:22, fontWeight:500, letterSpacing:'-0.005em', margin:'0 0 6px', textAlign:'center' }}>Logg inn</h2>
-        <p style={{ fontSize:13, color:'var(--ink-2)', margin:'0 0 24px', textAlign:'center' }}>Skriv inn brukernavn og passord for å fortsette.</p>
-        {error && <div className="login-error">{error}</div>}
+        <div style={{ textAlign:'center', marginBottom:28 }}><RipsLogo size={38} bg="var(--paper)" /></div>
+        <h2 style={{ fontSize:22, fontWeight:500, letterSpacing:'-0.005em', margin:'0 0 6px', textAlign:'center' }}>
+          {mode === 'login' ? 'Logg inn' : 'Opprett konto'}
+        </h2>
+        <p style={{ fontSize:13, color:'var(--ink-2)', margin:'0 0 24px', textAlign:'center' }}>
+          {mode === 'login' ? 'Logg inn med e-post og passord.' : 'Opprett en ny Rips-konto.'}
+        </p>
+        {error && <div className="login-error" style={{ marginBottom:12 }}>{error}</div>}
+        {info  && <div style={{ background:'var(--leaf-wash,#e4ede4)', color:'var(--leaf)', border:'1px solid var(--leaf)', borderRadius:4, padding:'10px 14px', fontSize:13, marginBottom:12 }}>{info}</div>}
         <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {mode === 'signup' && (
+            <div className="form-group">
+              <label className="form-label">Navn</label>
+              <input className="rips-input" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Fornavn Etternavn" autoFocus />
+            </div>
+          )}
           <div className="form-group">
-            <label className="form-label">Brukernavn</label>
-            <input className="rips-input" type="text" value={username} onChange={e => { setUsername(e.target.value); setError(''); }} placeholder="ditt.navn@bedrift.no" autoFocus />
+            <label className="form-label">E-post</label>
+            <input className="rips-input" type="email" value={email} onChange={e => { setEmail(e.target.value); setError(''); }} placeholder="deg@bedrift.no" autoFocus={mode === 'login'} required />
           </div>
           <div className="form-group">
             <label className="form-label">Passord</label>
-            <input className="rips-input" type="password" value={password} onChange={e => { setPassword(e.target.value); setError(''); }} placeholder="••••••••" />
+            <input className="rips-input" type="password" value={password} onChange={e => { setPassword(e.target.value); setError(''); }} placeholder="••••••••" required minLength={6} />
           </div>
-          <button className="rips-btn" type="submit" style={{ width:'100%', justifyContent:'center', height:40, fontSize:14, marginTop:8 }}>
-            Logg inn
+          <button className="rips-btn" type="submit" disabled={loading} style={{ width:'100%', justifyContent:'center', height:40, fontSize:14, marginTop:8, opacity: loading ? 0.6 : 1 }}>
+            {loading ? 'Venter…' : mode === 'login' ? 'Logg inn' : 'Opprett konto'}
           </button>
         </form>
-        <p style={{ fontSize:11, color:'var(--ink-3)', marginTop:20, textAlign:'center' }}>Demo: bruk et hvilket som helst brukernavn og passord.</p>
+        <p style={{ fontSize:13, color:'var(--ink-2)', marginTop:20, textAlign:'center' }}>
+          {mode === 'login'
+            ? <span>Ny bruker? <button className="rips-btn-ghost" style={{ fontSize:13, color:'var(--currant)', padding:0, height:'auto' }} onClick={() => { setMode('signup'); setError(''); setInfo(''); }}>Opprett konto</button></span>
+            : <span>Har konto? <button className="rips-btn-ghost" style={{ fontSize:13, color:'var(--currant)', padding:0, height:'auto' }} onClick={() => { setMode('login'); setError(''); setInfo(''); }}>Logg inn</button></span>
+          }
+        </p>
       </div>
     </div>
   );
@@ -363,7 +406,7 @@ function Sidebar({ view, setView, collections, user, onLogout }) {
     <aside className="rips-sidebar">
       <div className="rips-brand">
         <RipsLogo size={30} bg="var(--paper-2)" />
-        <span className="rips-org">{user?.name || 'Bruker'}</span>
+        <span className="rips-org">{getUserName(user)}</span>
       </div>
       <div className="rips-sec">Workspace</div>
       {navItems.map(item => (
@@ -391,7 +434,7 @@ function Sidebar({ view, setView, collections, user, onLogout }) {
 ═══════════════════════════════════════════════════════════════ */
 
 function TopBar({ crumbs, user }) {
-  const initials = (name) => name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+  const initials = (name) => (name || 'B').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
   return (
     <header className="rips-topbar">
       <nav className="rips-crumbs">
@@ -411,7 +454,7 @@ function TopBar({ crumbs, user }) {
         <button className="rips-btn-ghost" style={{ padding:6, borderRadius:6, height:32, width:32, justifyContent:'center' }}>
           <Icon name="bell" size={16} />
         </button>
-        <div className="rips-avatar">{initials(user?.name || 'Admin')}</div>
+        <div className="rips-avatar">{initials(getUserName(user))}</div>
       </div>
     </header>
   );
@@ -658,7 +701,7 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
   const ticks = Array.from({ length: scale }, (_, i) => i + 1);
   const tags  = risk.tags || (risk.category ? [risk.category] : []);
   const log   = risk.log || [];
-  const who   = user?.name || 'Deg';
+  const who   = getUserName(user);
 
   const startEdit = () => {
     setETitle(risk.title); setEOwner(risk.owner); setETags(tags);
@@ -1426,7 +1469,8 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
 function ProfileView({ user, collections, onResetData }) {
   const totalRisks = collections.reduce((s, c) => s + c.risks.length, 0);
   const totalMits  = collections.reduce((s, c) => s + c.risks.reduce((s2, r) => s2 + r.mitigations.length, 0), 0);
-  const initials   = (name) => name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+  const displayName = getUserName(user);
+  const initials    = (n) => (n || 'B').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
 
   return (
     <div className="app-page">
@@ -1441,11 +1485,11 @@ function ProfileView({ user, collections, onResetData }) {
         {/* Profilkort */}
         <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:8, padding:28, display:'flex', flexDirection:'column', alignItems:'center', gap:16 }}>
           <div style={{ width:72, height:72, borderRadius:'50%', background:'var(--leaf)', color:'var(--leaf-skin)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:600, letterSpacing:'-0.01em' }}>
-            {initials(user?.name || 'Bruker')}
+            {initials(displayName)}
           </div>
           <div style={{ textAlign:'center' }}>
-            <div style={{ fontWeight:500, fontSize:17 }}>{user?.name}</div>
-            <div style={{ fontSize:13, color:'var(--ink-2)', marginTop:4 }}>Rips-bruker</div>
+            <div style={{ fontWeight:500, fontSize:17 }}>{displayName}</div>
+            <div style={{ fontSize:13, color:'var(--ink-2)', marginTop:4 }}>{user?.email}</div>
           </div>
         </div>
 
@@ -1506,21 +1550,39 @@ function ProfileView({ user, collections, onResetData }) {
 
 function AppShell({ user, onLogout }) {
   const [view,          setViewRaw]      = useState('dashboard');
-  const [collections,   setCollections]  = useState(() => {
-    try { const s = localStorage.getItem('rips_collections'); return s ? JSON.parse(s) : INITIAL_COLLECTIONS; } catch { return INITIAL_COLLECTIONS; }
-  });
+  const [collections,   setCollections]  = useState(INITIAL_COLLECTIONS);
   const [selectedId,    setSelectedId]   = useState(null);
   const [showAddCol,    setShowAddCol]   = useState(false);
-  const [availableTags, setAvailableTags] = useState(() => {
-    try { const s = localStorage.getItem('rips_tags'); return s ? JSON.parse(s) : INITIAL_TAGS; } catch { return INITIAL_TAGS; }
-  });
+  const [availableTags, setAvailableTags] = useState(INITIAL_TAGS);
+  const [dbReady,       setDbReady]      = useState(false);
 
-  useEffect(() => { localStorage.setItem('rips_collections', JSON.stringify(collections)); }, [collections]);
-  useEffect(() => { localStorage.setItem('rips_tags', JSON.stringify(availableTags)); }, [availableTags]);
+  // Load workspace from Supabase on mount
+  useEffect(() => {
+    db.from('workspaces').select('*').eq('id', user.id).single().then(({ data }) => {
+      if (data) {
+        if (data.collections?.length) setCollections(data.collections);
+        if (data.tags?.length)        setAvailableTags(data.tags);
+      }
+      setDbReady(true);
+    });
+  }, []);
 
-  const createTag  = (name) => setAvailableTags(prev => prev.includes(name) ? prev : [...prev, name]);
-  const deleteTag  = (name) => setAvailableTags(prev => prev.filter(t => t !== name));
-  const resetData  = () => { setCollections(INITIAL_COLLECTIONS); setAvailableTags(INITIAL_TAGS); localStorage.removeItem('rips_collections'); localStorage.removeItem('rips_tags'); setView('dashboard'); };
+  // Debounced save to Supabase (500 ms after last change)
+  useEffect(() => {
+    if (!dbReady) return;
+    const t = setTimeout(() => {
+      db.from('workspaces').upsert({ id: user.id, collections, tags: availableTags, updated_at: new Date().toISOString() });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [collections, availableTags, dbReady]);
+
+  const createTag = (name) => setAvailableTags(prev => prev.includes(name) ? prev : [...prev, name]);
+  const deleteTag = (name) => setAvailableTags(prev => prev.filter(t => t !== name));
+  const resetData = async () => {
+    setCollections(INITIAL_COLLECTIONS); setAvailableTags(INITIAL_TAGS);
+    await db.from('workspaces').upsert({ id: user.id, collections: INITIAL_COLLECTIONS, tags: INITIAL_TAGS, updated_at: new Date().toISOString() });
+    setView('dashboard');
+  };
 
   const setView = (v) => {
     setViewRaw(v);
@@ -1616,21 +1678,34 @@ function AppShell({ user, onLogout }) {
 ═══════════════════════════════════════════════════════════════ */
 
 function App() {
-  const [screen, setScreen] = useState('welcome');
+  const [screen, setScreen] = useState('loading');
   const [user,   setUser]   = useState(null);
 
-  if (screen === 'welcome') {
-    return <WelcomePage onLogin={() => setScreen('login')} />;
-  }
-  if (screen === 'login') {
-    return (
-      <LoginPage
-        onSuccess={u => { setUser(u); setScreen('app'); }}
-        onBack={() => setScreen('welcome')}
-      />
-    );
-  }
-  return <AppShell user={user} onLogout={() => { setUser(null); setScreen('welcome'); }} />;
+  useEffect(() => {
+    // Check for existing session (page reload, tab restore)
+    db.auth.getSession().then(({ data: { session } }) => {
+      if (session) { setUser(session.user); setScreen('app'); }
+      else           setScreen('welcome');
+    });
+    // Auth state changes (login / logout / token refresh)
+    const { data: { subscription } } = db.auth.onAuthStateChange((_event, session) => {
+      if (session) { setUser(session.user); setScreen('app'); }
+      else          { setUser(null); setScreen('welcome'); }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => { await db.auth.signOut(); };
+
+  if (screen === 'loading') return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'var(--paper)', flexDirection:'column', gap:16 }}>
+      <RipsLogo size={42} bg="var(--paper)" />
+      <div style={{ fontSize:13, color:'var(--ink-3)' }}>Laster…</div>
+    </div>
+  );
+  if (screen === 'welcome') return <WelcomePage onLogin={() => setScreen('login')} />;
+  if (screen === 'login')   return <LoginPage onBack={() => setScreen('welcome')} />;
+  return <AppShell user={user} onLogout={handleLogout} />;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
