@@ -577,16 +577,20 @@ function RiskTable({ risks, onOpen, scale = 5 }) {
 ═══════════════════════════════════════════════════════════════ */
 
 function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {}, user }) {
-  const [addingMit, setAddingMit] = useState(false);
-  const [mitLabel,  setMitLabel]  = useState('');
-  const [mitDue,    setMitDue]    = useState('');
-  const [editing,   setEditing]   = useState(false);
-  const [eTitle,    setETitle]    = useState('');
-  const [eOwner,    setEOwner]    = useState('');
-  const [eTags,     setETags]     = useState([]);
-  const [eP,        setEP]        = useState(1);
-  const [eC,        setEC]        = useState(1);
-  const [eDesc,     setEDesc]     = useState('');
+  const [addingMit,     setAddingMit]     = useState(false);
+  const [mitLabel,      setMitLabel]      = useState('');
+  const [mitDue,        setMitDue]        = useState('');
+  const [mitOwner,      setMitOwner]      = useState('');
+  const [editing,       setEditing]       = useState(false);
+  const [eTitle,        setETitle]        = useState('');
+  const [eOwner,        setEOwner]        = useState('');
+  const [eTags,         setETags]         = useState([]);
+  const [eP,            setEP]            = useState(1);
+  const [eC,            setEC]            = useState(1);
+  const [eDesc,         setEDesc]         = useState('');
+  const [riskCmtText,   setRiskCmtText]   = useState('');
+  const [expandedMitIds,setExpandedMitIds]= useState(new Set());
+  const [mitCmtTexts,   setMitCmtTexts]   = useState({});
 
   if (!risk) return null;
 
@@ -594,34 +598,47 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
   const ticks = Array.from({ length: scale }, (_, i) => i + 1);
   const tags  = risk.tags || (risk.category ? [risk.category] : []);
   const log   = risk.log || [];
+  const who   = user?.name || 'Deg';
 
   const startEdit = () => {
-    setETitle(risk.title);
-    setEOwner(risk.owner);
-    setETags(tags);
-    setEP(risk.p);
-    setEC(risk.c);
-    setEDesc(risk.description || '');
+    setETitle(risk.title); setEOwner(risk.owner); setETags(tags);
+    setEP(risk.p); setEC(risk.c); setEDesc(risk.description || '');
     setEditing(true);
   };
 
   const saveEdit = () => {
     if (!eTitle.trim() || !eOwner.trim()) return;
     const newLog = [...log];
-    const who = user?.name || 'Deg';
     if (eP !== risk.p) newLog.push({ id: uid('L'), ts: Date.now(), user: who, text: `Sannsynlighet endret fra ${risk.p} (${probLabel(risk.p, scale)}) til ${eP} (${probLabel(eP, scale)})` });
     if (eC !== risk.c) newLog.push({ id: uid('L'), ts: Date.now(), user: who, text: `Konsekvens endret fra ${risk.c} (${consLabel(risk.c, scale)}) til ${eC} (${consLabel(eC, scale)})` });
     onUpdate({ ...risk, title: eTitle.trim(), owner: eOwner.trim(), tags: eTags, p: eP, c: eC, description: eDesc.trim(), log: newLog });
     setEditing(false);
   };
 
-  const toggleMit = (id) => onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === id ? { ...m, done: !m.done } : m) });
-  const removeMit = (id) => onUpdate({ ...risk, mitigations: risk.mitigations.filter(m => m.id !== id) });
-  const saveMit   = () => {
+  const toggleMit       = (id) => onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === id ? { ...m, done: !m.done } : m) });
+  const removeMit       = (id) => onUpdate({ ...risk, mitigations: risk.mitigations.filter(m => m.id !== id) });
+  const saveMit         = () => {
     if (!mitLabel.trim()) return;
-    onUpdate({ ...risk, mitigations: [...risk.mitigations, { id: uid('M'), label: mitLabel.trim(), due: mitDue.trim(), done: false }] });
-    setMitLabel(''); setMitDue(''); setAddingMit(false);
+    onUpdate({ ...risk, mitigations: [...risk.mitigations, { id: uid('M'), label: mitLabel.trim(), due: mitDue.trim(), owner: mitOwner.trim(), done: false, comments: [] }] });
+    setMitLabel(''); setMitDue(''); setMitOwner(''); setAddingMit(false);
   };
+
+  const toggleMitExpand = (id) => setExpandedMitIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const addRiskComment  = () => {
+    if (!riskCmtText.trim()) return;
+    onUpdate({ ...risk, comments: [...(risk.comments || []), { id: uid('C'), ts: Date.now(), user: who, text: riskCmtText.trim() }] });
+    setRiskCmtText('');
+  };
+  const delRiskComment  = (cid) => onUpdate({ ...risk, comments: (risk.comments || []).filter(c => c.id !== cid) });
+
+  const addMitComment   = (mid) => {
+    const text = (mitCmtTexts[mid] || '').trim();
+    if (!text) return;
+    onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === mid ? { ...m, comments: [...(m.comments || []), { id: uid('C'), ts: Date.now(), user: who, text }] } : m) });
+    setMitCmtTexts(p => ({ ...p, [mid]: '' }));
+  };
+  const delMitComment   = (mid, cid) => onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === mid ? { ...m, comments: (m.comments || []).filter(c => c.id !== cid) } : m) });
 
   const doneCount = risk.mitigations.filter(m => m.done).length;
 
@@ -633,6 +650,34 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
     if (diffH < 24)   return `${diffH} t siden`;
     return new Date(ts).toLocaleDateString('nb-NO', { day:'numeric', month:'short' });
   };
+
+  const CommentThread = ({ comments = [], onAdd, onDelete, inputValue, onInputChange }) => (
+    <div className="comment-thread">
+      {comments.map(c => (
+        <div key={c.id} className="comment-item">
+          <div className="comment-meta">
+            <b>{c.user}</b>
+            <span className="mono">{formatTs(c.ts)}</span>
+            <button className="rips-btn-ghost" style={{ padding:'1px 3px', height:'auto', color:'var(--ink-3)', marginLeft:'auto' }} onClick={() => onDelete(c.id)}>
+              <Icon name="x" size={11} />
+            </button>
+          </div>
+          <div className="comment-text">{c.text}</div>
+        </div>
+      ))}
+      <div className="comment-add">
+        <textarea
+          className="rips-input"
+          placeholder="Skriv en kommentar…"
+          value={inputValue}
+          onChange={e => onInputChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onAdd(); } }}
+          rows={2}
+        />
+        <button className="rips-btn rips-small" onClick={onAdd} style={{ alignSelf:'flex-end' }}>Legg til</button>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -648,16 +693,10 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
           </div>
           <div style={{ display:'flex', gap:4, flexShrink:0 }}>
             {!editing && <>
-              <button className="rips-btn-ghost rips-small" style={{ color:'var(--ink-2)' }} onClick={startEdit} title="Rediger risiko">
-                <Icon name="edit" size={13} />
-              </button>
-              <button className="rips-btn-ghost rips-small" style={{ color:'var(--ink-3)' }} onClick={() => { if (confirm(`Slett risiko "${risk.title}"?`)) onDelete(risk.id); }} title="Slett risiko">
-                <Icon name="trash" size={13} />
-              </button>
+              <button className="rips-btn-ghost rips-small" style={{ color:'var(--ink-2)' }} onClick={startEdit} title="Rediger risiko"><Icon name="edit" size={13} /></button>
+              <button className="rips-btn-ghost rips-small" style={{ color:'var(--ink-3)' }} onClick={() => { if (confirm(`Slett risiko "${risk.title}"?`)) onDelete(risk.id); }} title="Slett risiko"><Icon name="trash" size={13} /></button>
             </>}
-            <button className="rips-btn-ghost" style={{ padding:6 }} onClick={editing ? () => setEditing(false) : onClose} title={editing ? 'Avbryt' : 'Lukk'}>
-              <Icon name="x" size={16} />
-            </button>
+            <button className="rips-btn-ghost" style={{ padding:6 }} onClick={editing ? () => setEditing(false) : onClose} title={editing ? 'Avbryt' : 'Lukk'}><Icon name="x" size={16} /></button>
           </div>
         </header>
 
@@ -711,13 +750,7 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
               </div>
               <div className="rips-field" style={{ gridColumn:'1 / -1' }}>
                 <div className="rips-cap" style={{ marginBottom:6 }}>Tagger</div>
-                <TagInput
-                  selected={tags}
-                  onChange={newTags => onUpdate({ ...risk, tags: newTags })}
-                  available={availableTags}
-                  onCreateTag={onCreateTag}
-                  onDeleteTag={onDeleteTag}
-                />
+                <TagInput selected={tags} onChange={newTags => onUpdate({ ...risk, tags: newTags })} available={availableTags} onCreateTag={onCreateTag} onDeleteTag={onDeleteTag} />
               </div>
               <div className="rips-field">
                 <div className="rips-cap">Sannsynlighet</div>
@@ -740,6 +773,22 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
               </p>
             </section>
 
+            {/* ── KOMMENTARER PÅ RISIKO ── */}
+            <section className="rips-section">
+              <div className="rips-cap" style={{ marginBottom:10 }}>
+                Kommentarer
+                {(risk.comments || []).length > 0 && <span style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--ink-3)', fontWeight:400, textTransform:'none', letterSpacing:0, marginLeft:6 }}>({risk.comments.length})</span>}
+              </div>
+              <CommentThread
+                comments={risk.comments || []}
+                onAdd={addRiskComment}
+                onDelete={delRiskComment}
+                inputValue={riskCmtText}
+                onInputChange={setRiskCmtText}
+              />
+            </section>
+
+            {/* ── TILTAK ── */}
             <section className="rips-section">
               <div className="rips-section-head">
                 <div className="rips-cap">
@@ -754,18 +803,13 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
 
               {addingMit && (
                 <div className="mit-add-form">
-                  <input
-                    className="rips-input"
-                    placeholder="Beskriv tiltaket…"
-                    value={mitLabel}
-                    onChange={e => setMitLabel(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveMit(); if (e.key === 'Escape') setAddingMit(false); }}
-                    autoFocus
-                  />
-                  <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                    <input className="rips-input" placeholder="Frist (31.08)" value={mitDue} onChange={e => setMitDue(e.target.value)} style={{ width:130, flex:'none' }} />
+                  <input className="rips-input" placeholder="Beskriv tiltaket…" value={mitLabel} onChange={e => setMitLabel(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveMit(); if (e.key === 'Escape') setAddingMit(false); }} autoFocus />
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto auto', gap:8, marginTop:8, alignItems:'center' }}>
+                    <input className="rips-input" placeholder="Ansvarlig" value={mitOwner} onChange={e => setMitOwner(e.target.value)} />
+                    <input className="rips-input" placeholder="Frist (31.08)" value={mitDue} onChange={e => setMitDue(e.target.value)} />
                     <button className="rips-btn rips-small" onClick={saveMit}>Legg til</button>
-                    <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); }}>Avbryt</button>
+                    <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); setMitOwner(''); }}>Avbryt</button>
                   </div>
                 </div>
               )}
@@ -774,18 +818,45 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
                 {risk.mitigations.length === 0 && !addingMit && (
                   <li style={{ color:'var(--ink-3)', fontStyle:'italic', border:'none', paddingTop:8 }}>Ingen tiltak registrert ennå.</li>
                 )}
-                {risk.mitigations.map(m => (
-                  <li key={m.id}>
-                    <span className={`rips-check ${m.done ? 'done' : ''}`} onClick={() => toggleMit(m.id)} title={m.done ? 'Marker som åpen' : 'Marker som fullført'}>
-                      {m.done && <Icon name="check" size={10} />}
-                    </span>
-                    <span className={m.done ? 'done' : ''} style={{ flex:1 }}>{m.label}</span>
-                    {m.due && <span className="rips-due">{m.due}</span>}
-                    <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-3)' }} onClick={() => removeMit(m.id)}>
-                      <Icon name="x" size={12} />
-                    </button>
-                  </li>
-                ))}
+                {risk.mitigations.map(m => {
+                  const cmtCount = (m.comments || []).length;
+                  const isExpanded = expandedMitIds.has(m.id);
+                  return (
+                    <li key={m.id} style={{ flexDirection:'column', alignItems:'stretch', gap:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 0' }}>
+                        <span className={`rips-check ${m.done ? 'done' : ''}`} onClick={() => toggleMit(m.id)} title={m.done ? 'Marker som åpen' : 'Marker som fullført'}>
+                          {m.done && <Icon name="check" size={10} />}
+                        </span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div className={m.done ? 'done' : ''}>{m.label}</div>
+                          {m.owner && <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:1 }}>{m.owner}</div>}
+                        </div>
+                        {m.due && <span className="rips-due">{m.due}</span>}
+                        <button
+                          className="rips-btn-ghost"
+                          style={{ padding:'2px 5px', height:'auto', color: cmtCount > 0 ? 'var(--currant)' : 'var(--ink-3)', fontSize:11, display:'flex', alignItems:'center', gap:3 }}
+                          onClick={() => toggleMitExpand(m.id)}
+                          title="Kommentarer"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                          {cmtCount > 0 && <span style={{ fontFamily:'var(--font-mono)' }}>{cmtCount}</span>}
+                        </button>
+                        <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-3)' }} onClick={() => removeMit(m.id)}>
+                          <Icon name="x" size={12} />
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <CommentThread
+                          comments={m.comments || []}
+                          onAdd={() => addMitComment(m.id)}
+                          onDelete={(cid) => delMitComment(m.id, cid)}
+                          inputValue={mitCmtTexts[m.id] || ''}
+                          onInputChange={val => setMitCmtTexts(p => ({ ...p, [m.id]: val }))}
+                        />
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </section>
 

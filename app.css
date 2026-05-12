@@ -592,3 +592,33 @@ textarea.rips-input { resize: vertical; min-height: 80px; }
 .rips-when {
   font-size: 11px; color: var(--ink-3); white-space: nowrap; flex-shrink: 0;
 }
+
+/* ═══════════════════════════════════════════════════
+   KOMMENTARER
+═══════════════════════════════════════════════════ */
+.comment-thread {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.comment-item {
+  background: var(--bg-sunken);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.comment-meta {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--ink-2);
+}
+.comment-meta b { color: var(--ink); font-weight: 500; }
+.comment-meta .mono { color: var(--ink-3); }
+.comment-text { font-size: 13px; color: var(--ink); line-height: 1.5; }
+.comment-add {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-top: 4px;
+}
+/* Mitigation comment thread sits indented below the item */
+.rips-mitigations li .comment-thread {
+  margin: 6px 0 4px 28px;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--rule);
+}
