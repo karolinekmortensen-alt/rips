@@ -1558,21 +1558,24 @@ function AppShell({ user, onLogout }) {
 
   // Load workspace from Supabase on mount
   useEffect(() => {
-    db.from('workspaces').select('*').eq('id', user.id).single().then(({ data }) => {
+    db.from('workspaces').select('*').eq('id', user.id).single().then(({ data, error }) => {
+      if (error && error.code !== 'PGRST116') console.error('Rips load error:', error);
       if (data) {
-        if (data.collections?.length) setCollections(data.collections);
-        if (data.tags?.length)        setAvailableTags(data.tags);
+        if (Array.isArray(data.collections)) setCollections(data.collections);
+        if (Array.isArray(data.tags) && data.tags.length) setAvailableTags(data.tags);
       }
       setDbReady(true);
     });
   }, []);
 
-  // Debounced save to Supabase (500 ms after last change)
+  // Debounced save to Supabase (800 ms after last change, only after initial load)
   useEffect(() => {
     if (!dbReady) return;
     const t = setTimeout(() => {
-      db.from('workspaces').upsert({ id: user.id, collections, tags: availableTags, updated_at: new Date().toISOString() });
-    }, 500);
+      db.from('workspaces')
+        .upsert({ id: user.id, collections, tags: availableTags, updated_at: new Date().toISOString() })
+        .then(({ error }) => { if (error) console.error('Rips save error:', error); });
+    }, 800);
     return () => clearTimeout(t);
   }, [collections, availableTags, dbReady]);
 
