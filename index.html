@@ -13,7 +13,7 @@
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState } = React;
+const { useState, useEffect, useRef } = React;
 
 /* ═══════════════════════════════════════════════════════════════
    KONSTANTER OG DATA
@@ -47,6 +47,14 @@ const SEV_PILL = {
 
 let _uid = 200;
 const uid = (prefix) => `${prefix}-${String(++_uid).padStart(4,'0')}`;
+
+// Display a date string (ISO "YYYY-MM-DD" or legacy "DD.MM") in Norwegian short format
+const formatDate = (s) => {
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s))
+    return new Date(s + 'T00:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' });
+  return s; // legacy "DD.MM" strings shown as-is
+};
 
 const INITIAL_COLLECTIONS = [
   {
@@ -147,6 +155,7 @@ function Icon({ name, size = 16, color }) {
     case 'logout':  return <svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>;
     case 'trash':   return <svg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>;
     case 'edit':    return <svg {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>;
+    case 'user':    return <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
     default:        return null;
   }
 }
@@ -346,6 +355,7 @@ function Sidebar({ view, setView, collections, user, onLogout }) {
   const navItems = [
     { id:'dashboard',   label:'Oversikt',   icon:'grid'   },
     { id:'collections', label:'Samlinger',  icon:'folder', count: collections.length },
+    { id:'profile',     label:'Profil',     icon:'user'   },
   ];
   const isCollectionActive = view === 'collection' || view === 'collections';
 
@@ -573,6 +583,52 @@ function RiskTable({ risks, onOpen, scale = 5 }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   RISIKOSKUFF — HJELPE-FUNKSJONER
+═══════════════════════════════════════════════════════════════ */
+
+const formatTs = (ts) => {
+  const diffMin = Math.round((Date.now() - ts) / 60000);
+  if (diffMin < 1)  return 'nettopp';
+  if (diffMin < 60) return `${diffMin} min siden`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24)   return `${diffH} t siden`;
+  return new Date(ts).toLocaleDateString('nb-NO', { day:'numeric', month:'short' });
+};
+
+// Top-level so React never unmounts/remounts it (fixes lost-focus on every keystroke)
+function CommentThread({ comments = [], onAdd, onDelete, inputValue, onInputChange }) {
+  const ref = useRef(null);
+  return (
+    <div className="comment-thread">
+      {comments.map(c => (
+        <div key={c.id} className="comment-item">
+          <div className="comment-meta">
+            <b>{c.user}</b>
+            <span className="mono">{formatTs(c.ts)}</span>
+            <button className="rips-btn-ghost" style={{ padding:'1px 3px', height:'auto', color:'var(--ink-3)', marginLeft:'auto' }} onClick={() => onDelete(c.id)}>
+              <Icon name="x" size={11} />
+            </button>
+          </div>
+          <div className="comment-text">{c.text}</div>
+        </div>
+      ))}
+      <div className="comment-add">
+        <textarea
+          ref={ref}
+          className="rips-input"
+          placeholder="Skriv en kommentar… (Enter for å sende)"
+          value={inputValue}
+          onChange={e => onInputChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onAdd(); ref.current?.focus(); } }}
+          rows={2}
+        />
+        <button className="rips-btn rips-small" onClick={() => { onAdd(); ref.current?.focus(); }} style={{ alignSelf:'flex-end' }}>Legg til</button>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    RISIKOSKUFF (DRAWER)
 ═══════════════════════════════════════════════════════════════ */
 
@@ -581,6 +637,10 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
   const [mitLabel,      setMitLabel]      = useState('');
   const [mitDue,        setMitDue]        = useState('');
   const [mitOwner,      setMitOwner]      = useState('');
+  const [editMitId,     setEditMitId]     = useState(null);
+  const [eMitLabel,     setEMitLabel]     = useState('');
+  const [eMitOwner,     setEMitOwner]     = useState('');
+  const [eMitDue,       setEMitDue]       = useState('');
   const [editing,       setEditing]       = useState(false);
   const [eTitle,        setETitle]        = useState('');
   const [eOwner,        setEOwner]        = useState('');
@@ -623,7 +683,14 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
     setMitLabel(''); setMitDue(''); setMitOwner(''); setAddingMit(false);
   };
 
-  const toggleMitExpand = (id) => setExpandedMitIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleMitExpand  = (id) => setExpandedMitIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const startEditMit = (m) => { setEditMitId(m.id); setEMitLabel(m.label); setEMitOwner(m.owner || ''); setEMitDue(m.due || ''); };
+  const saveEditMit  = () => {
+    if (!eMitLabel.trim()) return;
+    onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === editMitId ? { ...m, label: eMitLabel.trim(), owner: eMitOwner.trim(), due: eMitDue } : m) });
+    setEditMitId(null);
+  };
 
   const addRiskComment  = () => {
     if (!riskCmtText.trim()) return;
@@ -641,43 +708,6 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
   const delMitComment   = (mid, cid) => onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === mid ? { ...m, comments: (m.comments || []).filter(c => c.id !== cid) } : m) });
 
   const doneCount = risk.mitigations.filter(m => m.done).length;
-
-  const formatTs = (ts) => {
-    const diffMin = Math.round((Date.now() - ts) / 60000);
-    if (diffMin < 1)  return 'nettopp';
-    if (diffMin < 60) return `${diffMin} min siden`;
-    const diffH = Math.round(diffMin / 60);
-    if (diffH < 24)   return `${diffH} t siden`;
-    return new Date(ts).toLocaleDateString('nb-NO', { day:'numeric', month:'short' });
-  };
-
-  const CommentThread = ({ comments = [], onAdd, onDelete, inputValue, onInputChange }) => (
-    <div className="comment-thread">
-      {comments.map(c => (
-        <div key={c.id} className="comment-item">
-          <div className="comment-meta">
-            <b>{c.user}</b>
-            <span className="mono">{formatTs(c.ts)}</span>
-            <button className="rips-btn-ghost" style={{ padding:'1px 3px', height:'auto', color:'var(--ink-3)', marginLeft:'auto' }} onClick={() => onDelete(c.id)}>
-              <Icon name="x" size={11} />
-            </button>
-          </div>
-          <div className="comment-text">{c.text}</div>
-        </div>
-      ))}
-      <div className="comment-add">
-        <textarea
-          className="rips-input"
-          placeholder="Skriv en kommentar…"
-          value={inputValue}
-          onChange={e => onInputChange(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onAdd(); } }}
-          rows={2}
-        />
-        <button className="rips-btn rips-small" onClick={onAdd} style={{ alignSelf:'flex-end' }}>Legg til</button>
-      </div>
-    </div>
-  );
 
   return (
     <>
@@ -805,9 +835,9 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
                 <div className="mit-add-form">
                   <input className="rips-input" placeholder="Beskriv tiltaket…" value={mitLabel} onChange={e => setMitLabel(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') saveMit(); if (e.key === 'Escape') setAddingMit(false); }} autoFocus />
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto auto', gap:8, marginTop:8, alignItems:'center' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:8, marginTop:8, alignItems:'center' }}>
                     <input className="rips-input" placeholder="Ansvarlig" value={mitOwner} onChange={e => setMitOwner(e.target.value)} />
-                    <input className="rips-input" placeholder="Frist (31.08)" value={mitDue} onChange={e => setMitDue(e.target.value)} />
+                    <input className="rips-input" type="date" value={mitDue} onChange={e => setMitDue(e.target.value)} style={{ width:148 }} />
                     <button className="rips-btn rips-small" onClick={saveMit}>Legg til</button>
                     <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); setMitOwner(''); }}>Avbryt</button>
                   </div>
@@ -819,33 +849,45 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
                   <li style={{ color:'var(--ink-3)', fontStyle:'italic', border:'none', paddingTop:8 }}>Ingen tiltak registrert ennå.</li>
                 )}
                 {risk.mitigations.map(m => {
-                  const cmtCount = (m.comments || []).length;
+                  const cmtCount   = (m.comments || []).length;
                   const isExpanded = expandedMitIds.has(m.id);
+                  const isEditing  = editMitId === m.id;
                   return (
                     <li key={m.id} style={{ flexDirection:'column', alignItems:'stretch', gap:0 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 0' }}>
-                        <span className={`rips-check ${m.done ? 'done' : ''}`} onClick={() => toggleMit(m.id)} title={m.done ? 'Marker som åpen' : 'Marker som fullført'}>
-                          {m.done && <Icon name="check" size={10} />}
-                        </span>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div className={m.done ? 'done' : ''}>{m.label}</div>
-                          {m.owner && <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:1 }}>{m.owner}</div>}
+                      {isEditing ? (
+                        <div style={{ display:'flex', flexDirection:'column', gap:8, padding:'6px 0' }}>
+                          <input className="rips-input" value={eMitLabel} onChange={e => setEMitLabel(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') saveEditMit(); if (e.key === 'Escape') setEditMitId(null); }} autoFocus />
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:8, alignItems:'center' }}>
+                            <input className="rips-input" placeholder="Ansvarlig" value={eMitOwner} onChange={e => setEMitOwner(e.target.value)} />
+                            <input className="rips-input" type="date" value={eMitDue} onChange={e => setEMitDue(e.target.value)} style={{ width:148 }} />
+                            <button className="rips-btn rips-small" onClick={saveEditMit}>Lagre</button>
+                            <button className="rips-btn-ghost rips-small" onClick={() => setEditMitId(null)}>Avbryt</button>
+                          </div>
                         </div>
-                        {m.due && <span className="rips-due">{m.due}</span>}
-                        <button
-                          className="rips-btn-ghost"
-                          style={{ padding:'2px 5px', height:'auto', color: cmtCount > 0 ? 'var(--currant)' : 'var(--ink-3)', fontSize:11, display:'flex', alignItems:'center', gap:3 }}
-                          onClick={() => toggleMitExpand(m.id)}
-                          title="Kommentarer"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                          {cmtCount > 0 && <span style={{ fontFamily:'var(--font-mono)' }}>{cmtCount}</span>}
-                        </button>
-                        <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-3)' }} onClick={() => removeMit(m.id)}>
-                          <Icon name="x" size={12} />
-                        </button>
-                      </div>
-                      {isExpanded && (
+                      ) : (
+                        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 0' }}>
+                          <span className={`rips-check ${m.done ? 'done' : ''}`} onClick={() => toggleMit(m.id)} title={m.done ? 'Marker som åpen' : 'Marker som fullført'}>
+                            {m.done && <Icon name="check" size={10} />}
+                          </span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div className={m.done ? 'done' : ''}>{m.label}</div>
+                            {m.owner && <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:1 }}>{m.owner}</div>}
+                          </div>
+                          {m.due && <span className="rips-due">{formatDate(m.due)}</span>}
+                          <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-2)' }} onClick={() => startEditMit(m)} title="Rediger tiltak">
+                            <Icon name="edit" size={11} />
+                          </button>
+                          <button className="rips-btn-ghost" style={{ padding:'2px 5px', height:'auto', color: cmtCount > 0 ? 'var(--currant)' : 'var(--ink-3)', fontSize:11, display:'flex', alignItems:'center', gap:3 }} onClick={() => toggleMitExpand(m.id)} title="Kommentarer">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            {cmtCount > 0 && <span style={{ fontFamily:'var(--font-mono)' }}>{cmtCount}</span>}
+                          </button>
+                          <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-3)' }} onClick={() => removeMit(m.id)}>
+                            <Icon name="x" size={12} />
+                          </button>
+                        </div>
+                      )}
+                      {isExpanded && !isEditing && (
                         <CommentThread
                           comments={m.comments || []}
                           onAdd={() => addMitComment(m.id)}
@@ -1378,18 +1420,107 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   BRUKERPROFIL
+═══════════════════════════════════════════════════════════════ */
+
+function ProfileView({ user, collections, onResetData }) {
+  const totalRisks = collections.reduce((s, c) => s + c.risks.length, 0);
+  const totalMits  = collections.reduce((s, c) => s + c.risks.reduce((s2, r) => s2 + r.mitigations.length, 0), 0);
+  const initials   = (name) => name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+
+  return (
+    <div className="app-page">
+      <header className="page-head">
+        <div className="page-title-block">
+          <div className="rips-cap">Konto</div>
+          <h1 className="page-title">Brukerprofil</h1>
+        </div>
+      </header>
+
+      <div style={{ display:'grid', gridTemplateColumns:'280px 1fr', gap:24, alignItems:'start' }}>
+        {/* Profilkort */}
+        <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:8, padding:28, display:'flex', flexDirection:'column', alignItems:'center', gap:16 }}>
+          <div style={{ width:72, height:72, borderRadius:'50%', background:'var(--leaf)', color:'var(--leaf-skin)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:600, letterSpacing:'-0.01em' }}>
+            {initials(user?.name || 'Bruker')}
+          </div>
+          <div style={{ textAlign:'center' }}>
+            <div style={{ fontWeight:500, fontSize:17 }}>{user?.name}</div>
+            <div style={{ fontSize:13, color:'var(--ink-2)', marginTop:4 }}>Rips-bruker</div>
+          </div>
+        </div>
+
+        {/* Stats + innstillinger */}
+        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+          <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:8, padding:'20px 24px' }}>
+            <div className="rips-cap" style={{ marginBottom:16 }}>Aktivitet i workspace</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:16 }}>
+              {[
+                { cap:'Samlinger', val: collections.length },
+                { cap:'Risikoer', val: totalRisks },
+                { cap:'Tiltak', val: totalMits },
+              ].map(k => (
+                <div key={k.cap}>
+                  <div style={{ fontSize:11, color:'var(--ink-3)', textTransform:'uppercase', letterSpacing:'0.07em', fontWeight:500 }}>{k.cap}</div>
+                  <div style={{ fontFamily:'var(--font-display)', fontSize:36, lineHeight:1.1, letterSpacing:'-0.015em', marginTop:4 }}>{k.val}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:8, padding:'20px 24px' }}>
+            <div className="rips-cap" style={{ marginBottom:12 }}>Lagringsinfo</div>
+            <p style={{ fontSize:13, color:'var(--ink-2)', margin:'0 0 16px' }}>
+              Data lagres lokalt i nettleseren (localStorage). Tøm data for å starte fra bunnen, eller eksporter for sikkerhetskopiering.
+            </p>
+            <div style={{ display:'flex', gap:10 }}>
+              <button
+                className="rips-btn-secondary"
+                onClick={() => {
+                  const json = JSON.stringify({ collections, exportedAt: new Date().toISOString() }, null, 2);
+                  const a = document.createElement('a');
+                  a.href = URL.createObjectURL(new Blob([json], { type:'application/json' }));
+                  a.download = `rips-backup-${new Date().toISOString().slice(0,10)}.json`;
+                  a.click();
+                }}
+              >
+                Eksporter JSON
+              </button>
+              <button
+                className="rips-btn-ghost"
+                style={{ color:'var(--currant)' }}
+                onClick={() => { if (confirm('Slett all data og start på nytt? Dette kan ikke angres.')) onResetData(); }}
+              >
+                Tøm all data
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    APP SHELL (autentisert)
 ═══════════════════════════════════════════════════════════════ */
 
 function AppShell({ user, onLogout }) {
   const [view,          setViewRaw]      = useState('dashboard');
-  const [collections,   setCollections]  = useState(INITIAL_COLLECTIONS);
+  const [collections,   setCollections]  = useState(() => {
+    try { const s = localStorage.getItem('rips_collections'); return s ? JSON.parse(s) : INITIAL_COLLECTIONS; } catch { return INITIAL_COLLECTIONS; }
+  });
   const [selectedId,    setSelectedId]   = useState(null);
   const [showAddCol,    setShowAddCol]   = useState(false);
-  const [availableTags, setAvailableTags] = useState(INITIAL_TAGS);
+  const [availableTags, setAvailableTags] = useState(() => {
+    try { const s = localStorage.getItem('rips_tags'); return s ? JSON.parse(s) : INITIAL_TAGS; } catch { return INITIAL_TAGS; }
+  });
+
+  useEffect(() => { localStorage.setItem('rips_collections', JSON.stringify(collections)); }, [collections]);
+  useEffect(() => { localStorage.setItem('rips_tags', JSON.stringify(availableTags)); }, [availableTags]);
 
   const createTag  = (name) => setAvailableTags(prev => prev.includes(name) ? prev : [...prev, name]);
   const deleteTag  = (name) => setAvailableTags(prev => prev.filter(t => t !== name));
+  const resetData  = () => { setCollections(INITIAL_COLLECTIONS); setAvailableTags(INITIAL_TAGS); localStorage.removeItem('rips_collections'); localStorage.removeItem('rips_tags'); setView('dashboard'); };
 
   const setView = (v) => {
     setViewRaw(v);
@@ -1401,6 +1532,7 @@ function AppShell({ user, onLogout }) {
   const crumbs =
     view === 'dashboard'   ? ['Workspace', 'Oversikt'] :
     view === 'collections' ? ['Workspace', 'Samlinger'] :
+    view === 'profile'     ? ['Konto', 'Brukerprofil'] :
     ['Workspace', 'Samlinger', selectedCollection?.name || '…'];
 
   const addCollection = (col) => setCollections(prev => [...prev, col]);
@@ -1463,6 +1595,9 @@ function AppShell({ user, onLogout }) {
             onDeleteTag={deleteTag}
             user={user}
           />
+        )}
+        {view === 'profile' && (
+          <ProfileView user={user} collections={collections} onResetData={resetData} />
         )}
       </main>
 
