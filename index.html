@@ -70,80 +70,7 @@ const formatDate = (s) => {
   return s; // legacy "DD.MM" strings shown as-is
 };
 
-const INITIAL_COLLECTIONS = [
-  {
-    id: 'C-0001', name: 'IT-sikkerhet 2026',
-    description: 'Informasjonssikkerhet og databehandling for Sparebank Vest.',
-    owner: 'Jonas Vik', period: 'Q2 2026', scale: 5,
-    risks: [
-      { id:'R-0001', title:'Datalekkasje, kundedata',
-        description:'Penetrasjonstest avdekket utdatert tilgangskontroll på lese-replika. Eksponering ville rammet GDPR.',
-        owner:'Jonas Vik', tags:['IT-sikkerhet'], p:2, c:5,
-        mitigations:[
-          {id:'M-001',label:'Patche lese-replika',due:'15.08',done:true},
-          {id:'M-002',label:'Roter alle tjenestekontoer',due:'19.08',done:true},
-          {id:'M-003',label:'Innfør just-in-time tilgang',due:'01.10',done:false},
-        ]},
-      { id:'R-0002', title:'Brann, datasenter Bergen',
-        description:'Brannsikring ikke testet siste 24 måneder. DR-plan er utdatert.',
-        owner:'Jonas Vik', tags:['IT-sikkerhet'], p:1, c:5,
-        mitigations:[{id:'M-004',label:'Planlegg brannøvelse',due:'30.09',done:false}]},
-      { id:'R-0003', title:'Uautorisert tilgang, admin-portal',
-        description:'Svak passordpolicy for admin-brukere oppdaget i internrevisjon.',
-        owner:'Sara Eng', tags:['IT-sikkerhet'], p:3, c:4,
-        mitigations:[
-          {id:'M-005',label:'Innfør MFA for alle admins',due:'31.07',done:true},
-          {id:'M-006',label:'Gjennomgå tilgangslogg',due:'15.08',done:false},
-        ]},
-      { id:'R-0004', title:'DDoS mot betalingsportal',
-        description:'Manglende rate-limiting og DDoS-beskyttelse avdekket i kapasitetstest.',
-        owner:'Jonas Vik', tags:['IT-sikkerhet'], p:3, c:3, mitigations:[]},
-      { id:'R-0005', title:'Utdatert tredjeparts avhengighet',
-        description:'CVE-2025-11234 i npm-pakke brukt i kundevendt frontend.',
-        owner:'Sara Eng', tags:['IT-sikkerhet'], p:4, c:2,
-        mitigations:[{id:'M-007',label:'Oppdater pakke til v3.1.2',due:'10.08',done:false}]},
-    ],
-  },
-  {
-    id: 'C-0002', name: 'Operasjonell risiko 2026',
-    description: 'Operasjonell risiko for kjernevirksomheten.',
-    owner: 'Mari Røst', period: 'Q3 2026', scale: 5,
-    risks: [
-      { id:'R-0010', title:'Leverandørmislighold, hovedrammeavtale',
-        description:'Sannsynlighet for mislighold økt etter Q2-resultater til hovedleverandør.',
-        owner:'Mari Røst', tags:['Operasjonell'], p:3, c:4,
-        mitigations:[
-          {id:'M-010',label:'Reforhandle SLA innen 1. september',due:'01.09',done:true},
-          {id:'M-011',label:'Identifisere reserveleverandør i EØS',due:'15.09',done:false},
-        ]},
-      { id:'R-0011', title:'Nøkkelperson, leadarkitekt',
-        description:'Ingen dokumentert successionsplan for lederrolle med kritisk systemkunnskap.',
-        owner:'Mari Røst', tags:['HR'], p:2, c:3, mitigations:[]},
-      { id:'R-0012', title:'Valutaeksponering, EUR-portefølje',
-        description:'EUR/NOK volatilitet over historisk gjennomsnitt. Påvirker tre kontrakter.',
-        owner:'Eline Aas', tags:['Finansiell'], p:4, c:2,
-        mitigations:[{id:'M-012',label:'Forward-sikring 60 % av eksponering',due:'05.08',done:true}]},
-      { id:'R-0013', title:'Forsinket levering, ny CRM',
-        description:'Prosjektet er tre uker forsinket. Kritisk avhengighet til salgsprosessen i Q4.',
-        owner:'Sara Eng', tags:['Prosjekt'], p:4, c:3, mitigations:[]},
-    ],
-  },
-  {
-    id: 'C-0003', name: 'Compliance 2026',
-    description: 'Etterlevelse av regelverk og internkontroll.',
-    owner: 'Petter Lo', period: 'Q3 2026', scale: 5,
-    risks: [
-      { id:'R-0020', title:'Endring i hvitvaskingsregelverk',
-        description:'Nye KYC-krav fra Finanstilsynet trer i kraft 1. oktober.',
-        owner:'Petter Lo', tags:['Compliance'], p:4, c:3,
-        mitigations:[{id:'M-020',label:'Kartlegg gap mot nytt regelverk',due:'15.08',done:false}]},
-      { id:'R-0021', title:'Manglende segregering, godkjenninger',
-        description:'To brukere med overlappende rettigheter oppdaget i internrevisjon.',
-        owner:'Petter Lo', tags:['Compliance'], p:2, c:2,
-        mitigations:[{id:'M-021',label:'Gjennomgå rollematrise',due:'31.08',done:false}]},
-    ],
-  },
-];
+const INITIAL_COLLECTIONS = [];
 
 /* ═══════════════════════════════════════════════════════════════
    HJELPEKOMPONENTER
@@ -1620,7 +1547,7 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
    BRUKERPROFIL
 ═══════════════════════════════════════════════════════════════ */
 
-function ProfileView({ user, collections, onResetData }) {
+function ProfileView({ user, collections }) {
   const totalRisks = collections.reduce((s, c) => s + c.risks.length, 0);
   const totalMits  = collections.reduce((s, c) => s + c.risks.reduce((s2, r) => s2 + r.mitigations.length, 0), 0);
   const displayName = getUserName(user);
@@ -1666,31 +1593,22 @@ function ProfileView({ user, collections, onResetData }) {
           </div>
 
           <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:8, padding:'20px 24px' }}>
-            <div className="rips-cap" style={{ marginBottom:12 }}>Lagringsinfo</div>
+            <div className="rips-cap" style={{ marginBottom:12 }}>Eksport</div>
             <p style={{ fontSize:13, color:'var(--ink-2)', margin:'0 0 16px' }}>
-              Data lagres lokalt i nettleseren (localStorage). Tøm data for å starte fra bunnen, eller eksporter for sikkerhetskopiering.
+              Last ned en sikkerhetskopi av alle samlinger og risikoer som JSON.
             </p>
-            <div style={{ display:'flex', gap:10 }}>
-              <button
-                className="rips-btn-secondary"
-                onClick={() => {
-                  const json = JSON.stringify({ collections, exportedAt: new Date().toISOString() }, null, 2);
-                  const a = document.createElement('a');
-                  a.href = URL.createObjectURL(new Blob([json], { type:'application/json' }));
-                  a.download = `rips-backup-${new Date().toISOString().slice(0,10)}.json`;
-                  a.click();
-                }}
-              >
-                Eksporter JSON
-              </button>
-              <button
-                className="rips-btn-ghost"
-                style={{ color:'var(--currant)' }}
-                onClick={() => { if (confirm('Slett all data og start på nytt? Dette kan ikke angres.')) onResetData(); }}
-              >
-                Tøm all data
-              </button>
-            </div>
+            <button
+              className="rips-btn-secondary"
+              onClick={() => {
+                const json = JSON.stringify({ collections, exportedAt: new Date().toISOString() }, null, 2);
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([json], { type:'application/json' }));
+                a.download = `rips-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+              }}
+            >
+              Eksporter JSON
+            </button>
           </div>
         </div>
       </div>
@@ -1737,11 +1655,7 @@ function AppShell({ user, onLogout }) {
 
   const createTag = (name) => setAvailableTags(prev => prev.includes(name) ? prev : [...prev, name]);
   const deleteTag = (name) => setAvailableTags(prev => prev.filter(t => t !== name));
-  const resetData = async () => {
-    setCollections(INITIAL_COLLECTIONS); setAvailableTags(INITIAL_TAGS);
-    await db.from('workspaces').upsert({ id: user.id, collections: INITIAL_COLLECTIONS, tags: INITIAL_TAGS, updated_at: new Date().toISOString() });
-    setView('dashboard');
-  };
+
 
   const setView = (v) => {
     setViewRaw(v);
@@ -1819,7 +1733,7 @@ function AppShell({ user, onLogout }) {
           />
         )}
         {view === 'profile' && (
-          <ProfileView user={user} collections={collections} onResetData={resetData} />
+          <ProfileView user={user} collections={collections} />
         )}
       </main>
 
