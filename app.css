@@ -570,3 +570,18 @@ textarea.rips-input { resize: vertical; min-height: 80px; }
   white-space: nowrap;
 }
 
+
+/* ═══════════════════════════════════════════════════
+   ENDRINGSLOGG (aktivitetsstrøm i drawer)
+═══════════════════════════════════════════════════ */
+.rips-activity {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.rips-activity li {
+  display: flex; gap: 10px; align-items: baseline;
+  font-size: 13px; color: var(--ink);
+}
+.rips-when {
+  font-size: 11px; color: var(--ink-3); white-space: nowrap; flex-shrink: 0;
+}

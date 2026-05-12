@@ -576,149 +576,234 @@ function RiskTable({ risks, onOpen, scale = 5 }) {
    RISIKOSKUFF (DRAWER)
 ═══════════════════════════════════════════════════════════════ */
 
-function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {} }) {
+function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {}, user }) {
   const [addingMit, setAddingMit] = useState(false);
-  const [mitLabel, setMitLabel]   = useState('');
-  const [mitDue, setMitDue]       = useState('');
+  const [mitLabel,  setMitLabel]  = useState('');
+  const [mitDue,    setMitDue]    = useState('');
+  const [editing,   setEditing]   = useState(false);
+  const [eTitle,    setETitle]    = useState('');
+  const [eOwner,    setEOwner]    = useState('');
+  const [eTags,     setETags]     = useState([]);
+  const [eP,        setEP]        = useState(1);
+  const [eC,        setEC]        = useState(1);
+  const [eDesc,     setEDesc]     = useState('');
 
   if (!risk) return null;
-  const sev = getSev(risk.p, risk.c, scale);
 
-  const toggleMit = (id) => {
-    onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === id ? { ...m, done: !m.done } : m) });
+  const sev   = getSev(risk.p, risk.c, scale);
+  const ticks = Array.from({ length: scale }, (_, i) => i + 1);
+  const tags  = risk.tags || (risk.category ? [risk.category] : []);
+  const log   = risk.log || [];
+
+  const startEdit = () => {
+    setETitle(risk.title);
+    setEOwner(risk.owner);
+    setETags(tags);
+    setEP(risk.p);
+    setEC(risk.c);
+    setEDesc(risk.description || '');
+    setEditing(true);
   };
 
-  const removeMit = (id) => {
-    onUpdate({ ...risk, mitigations: risk.mitigations.filter(m => m.id !== id) });
+  const saveEdit = () => {
+    if (!eTitle.trim() || !eOwner.trim()) return;
+    const newLog = [...log];
+    const who = user?.name || 'Deg';
+    if (eP !== risk.p) newLog.push({ id: uid('L'), ts: Date.now(), user: who, text: `Sannsynlighet endret fra ${risk.p} (${probLabel(risk.p, scale)}) til ${eP} (${probLabel(eP, scale)})` });
+    if (eC !== risk.c) newLog.push({ id: uid('L'), ts: Date.now(), user: who, text: `Konsekvens endret fra ${risk.c} (${consLabel(risk.c, scale)}) til ${eC} (${consLabel(eC, scale)})` });
+    onUpdate({ ...risk, title: eTitle.trim(), owner: eOwner.trim(), tags: eTags, p: eP, c: eC, description: eDesc.trim(), log: newLog });
+    setEditing(false);
   };
 
-  const saveMit = () => {
+  const toggleMit = (id) => onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === id ? { ...m, done: !m.done } : m) });
+  const removeMit = (id) => onUpdate({ ...risk, mitigations: risk.mitigations.filter(m => m.id !== id) });
+  const saveMit   = () => {
     if (!mitLabel.trim()) return;
-    const m = { id: uid('M'), label: mitLabel.trim(), due: mitDue.trim(), done: false };
-    onUpdate({ ...risk, mitigations: [...risk.mitigations, m] });
+    onUpdate({ ...risk, mitigations: [...risk.mitigations, { id: uid('M'), label: mitLabel.trim(), due: mitDue.trim(), done: false }] });
     setMitLabel(''); setMitDue(''); setAddingMit(false);
   };
 
   const doneCount = risk.mitigations.filter(m => m.done).length;
 
+  const formatTs = (ts) => {
+    const diffMin = Math.round((Date.now() - ts) / 60000);
+    if (diffMin < 1)  return 'nettopp';
+    if (diffMin < 60) return `${diffMin} min siden`;
+    const diffH = Math.round(diffMin / 60);
+    if (diffH < 24)   return `${diffH} t siden`;
+    return new Date(ts).toLocaleDateString('nb-NO', { day:'numeric', month:'short' });
+  };
+
   return (
     <>
-      <div className="rips-scrim" onClick={onClose}></div>
+      <div className="rips-scrim" onClick={editing ? undefined : onClose}></div>
       <aside className="rips-drawer">
         <header className="rips-drawer-head">
-          <div>
+          <div style={{ flex:1, minWidth:0 }}>
             <div className="rips-cap">Risiko · <span className="mono">{risk.id}</span></div>
-            <h2 className="rips-drawer-title">{risk.title}</h2>
+            {editing
+              ? <input className="rips-input" value={eTitle} onChange={e => setETitle(e.target.value)} style={{ marginTop:6, fontWeight:500 }} autoFocus />
+              : <h2 className="rips-drawer-title">{risk.title}</h2>
+            }
           </div>
-          <div style={{ display:'flex', gap:4 }}>
-            <button
-              className="rips-btn-ghost rips-small"
-              style={{ color:'var(--ink-3)' }}
-              onClick={() => { if (confirm(`Slett risiko "${risk.title}"?`)) onDelete(risk.id); }}
-              title="Slett risiko"
-            >
-              <Icon name="trash" size={13} />
-            </button>
-            <button className="rips-btn-ghost" style={{ padding:6 }} onClick={onClose} title="Lukk">
+          <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+            {!editing && <>
+              <button className="rips-btn-ghost rips-small" style={{ color:'var(--ink-2)' }} onClick={startEdit} title="Rediger risiko">
+                <Icon name="edit" size={13} />
+              </button>
+              <button className="rips-btn-ghost rips-small" style={{ color:'var(--ink-3)' }} onClick={() => { if (confirm(`Slett risiko "${risk.title}"?`)) onDelete(risk.id); }} title="Slett risiko">
+                <Icon name="trash" size={13} />
+              </button>
+            </>}
+            <button className="rips-btn-ghost" style={{ padding:6 }} onClick={editing ? () => setEditing(false) : onClose} title={editing ? 'Avbryt' : 'Lukk'}>
               <Icon name="x" size={16} />
             </button>
           </div>
         </header>
 
-        <div className="rips-drawer-grid">
-          <div className="rips-field">
-            <div className="rips-cap">Alvor</div>
-            <SevPill sev={sev} />
-          </div>
-          <div className="rips-field">
-            <div className="rips-cap">Eier</div>
-            <div style={{ fontSize:14 }}>{risk.owner}</div>
-          </div>
-          <div className="rips-field" style={{ gridColumn:'1 / -1' }}>
-            <div className="rips-cap" style={{ marginBottom:6 }}>Tagger</div>
-            <TagInput
-              selected={risk.tags || (risk.category ? [risk.category] : [])}
-              onChange={tags => onUpdate({ ...risk, tags, category: undefined })}
-              available={availableTags}
-              onCreateTag={onCreateTag}
-              onDeleteTag={onDeleteTag}
-            />
-          </div>
-          <div className="rips-field">
-            <div className="rips-cap">Sannsynlighet</div>
-            <div className="mono">{risk.p} — {probLabel(risk.p, scale)}</div>
-          </div>
-          <div className="rips-field">
-            <div className="rips-cap">Konsekvens</div>
-            <div className="mono">{risk.c} — {consLabel(risk.c, scale)}</div>
-          </div>
-          <div className="rips-field">
-            <div className="rips-cap">Risikoscore</div>
-            <div className="mono" style={{ fontSize:18, fontFamily:'var(--font-display)', letterSpacing:'-0.01em' }}>{risk.p * risk.c}</div>
-          </div>
-        </div>
-
-        <section className="rips-section">
-          <div className="rips-cap" style={{ marginBottom:8 }}>Beskrivelse</div>
-          <p className="rips-body">
-            {risk.description || <em style={{ color:'var(--ink-3)' }}>Ingen beskrivelse ennå. Legg til kontekst slik at neste eier kan handle uten å spørre.</em>}
-          </p>
-        </section>
-
-        <section className="rips-section">
-          <div className="rips-section-head">
-            <div className="rips-cap">
-              Tiltak <span style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--ink-3)', fontWeight:400, textTransform:'none', letterSpacing:0 }}>({doneCount}/{risk.mitigations.length})</span>
+        {editing ? (
+          <div style={{ padding:'4px 20px 24px', display:'flex', flexDirection:'column', gap:14 }}>
+            <div className="form-group">
+              <label className="form-label">Eier</label>
+              <input className="rips-input" value={eOwner} onChange={e => setEOwner(e.target.value)} />
             </div>
-            {!addingMit && (
-              <button className="rips-btn-secondary rips-small" onClick={() => setAddingMit(true)}>
-                <Icon name="plus" size={12} /> Nytt tiltak
-              </button>
-            )}
-          </div>
-
-          {addingMit && (
-            <div className="mit-add-form">
-              <input
-                className="rips-input"
-                placeholder="Beskriv tiltaket…"
-                value={mitLabel}
-                onChange={e => setMitLabel(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') saveMit(); if (e.key === 'Escape') setAddingMit(false); }}
-                autoFocus
-              />
-              <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                <input
-                  className="rips-input"
-                  placeholder="Frist (31.08)"
-                  value={mitDue}
-                  onChange={e => setMitDue(e.target.value)}
-                  style={{ width:130, flex:'none' }}
-                />
-                <button className="rips-btn rips-small" onClick={saveMit}>Legg til</button>
-                <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); }}>Avbryt</button>
+            <div className="form-group">
+              <label className="form-label">Tagger</label>
+              <TagInput selected={eTags} onChange={setETags} available={availableTags} onCreateTag={onCreateTag} onDeleteTag={onDeleteTag} />
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, alignItems:'start' }}>
+              <div className="form-group">
+                <label className="form-label">Sannsynlighet (1–{scale})</label>
+                <select className="rips-input rips-select" value={eP} onChange={e => setEP(Number(e.target.value))}>
+                  {ticks.map(v => <option key={v} value={v}>{v} — {probLabel(v, scale)}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Konsekvens (1–{scale})</label>
+                <select className="rips-input rips-select" value={eC} onChange={e => setEC(Number(e.target.value))}>
+                  {ticks.map(v => <option key={v} value={v}>{v} — {consLabel(v, scale)}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Beregnet alvor</label>
+                <div style={{ paddingTop:8 }}><SevPill sev={getSev(eP, eC, scale)} /></div>
               </div>
             </div>
-          )}
+            <div className="form-group">
+              <label className="form-label">Beskrivelse</label>
+              <textarea className="rips-input" value={eDesc} onChange={e => setEDesc(e.target.value)} rows={4} />
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button className="rips-btn" onClick={saveEdit}>Lagre endringer</button>
+              <button className="rips-btn-secondary" onClick={() => setEditing(false)}>Avbryt</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="rips-drawer-grid">
+              <div className="rips-field">
+                <div className="rips-cap">Alvor</div>
+                <SevPill sev={sev} />
+              </div>
+              <div className="rips-field">
+                <div className="rips-cap">Eier</div>
+                <div style={{ fontSize:14 }}>{risk.owner}</div>
+              </div>
+              <div className="rips-field" style={{ gridColumn:'1 / -1' }}>
+                <div className="rips-cap" style={{ marginBottom:6 }}>Tagger</div>
+                <TagInput
+                  selected={tags}
+                  onChange={newTags => onUpdate({ ...risk, tags: newTags })}
+                  available={availableTags}
+                  onCreateTag={onCreateTag}
+                  onDeleteTag={onDeleteTag}
+                />
+              </div>
+              <div className="rips-field">
+                <div className="rips-cap">Sannsynlighet</div>
+                <div className="mono">{risk.p} — {probLabel(risk.p, scale)}</div>
+              </div>
+              <div className="rips-field">
+                <div className="rips-cap">Konsekvens</div>
+                <div className="mono">{risk.c} — {consLabel(risk.c, scale)}</div>
+              </div>
+              <div className="rips-field">
+                <div className="rips-cap">Risikoscore</div>
+                <div className="mono" style={{ fontSize:18, fontFamily:'var(--font-display)', letterSpacing:'-0.01em' }}>{risk.p * risk.c}</div>
+              </div>
+            </div>
 
-          <ul className="rips-mitigations">
-            {risk.mitigations.length === 0 && !addingMit && (
-              <li style={{ color:'var(--ink-3)', fontStyle:'italic', border:'none', paddingTop:8 }}>Ingen tiltak registrert ennå.</li>
+            <section className="rips-section">
+              <div className="rips-cap" style={{ marginBottom:8 }}>Beskrivelse</div>
+              <p className="rips-body">
+                {risk.description || <em style={{ color:'var(--ink-3)' }}>Ingen beskrivelse ennå. Legg til kontekst slik at neste eier kan handle uten å spørre.</em>}
+              </p>
+            </section>
+
+            <section className="rips-section">
+              <div className="rips-section-head">
+                <div className="rips-cap">
+                  Tiltak <span style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--ink-3)', fontWeight:400, textTransform:'none', letterSpacing:0 }}>({doneCount}/{risk.mitigations.length})</span>
+                </div>
+                {!addingMit && (
+                  <button className="rips-btn-secondary rips-small" onClick={() => setAddingMit(true)}>
+                    <Icon name="plus" size={12} /> Nytt tiltak
+                  </button>
+                )}
+              </div>
+
+              {addingMit && (
+                <div className="mit-add-form">
+                  <input
+                    className="rips-input"
+                    placeholder="Beskriv tiltaket…"
+                    value={mitLabel}
+                    onChange={e => setMitLabel(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveMit(); if (e.key === 'Escape') setAddingMit(false); }}
+                    autoFocus
+                  />
+                  <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                    <input className="rips-input" placeholder="Frist (31.08)" value={mitDue} onChange={e => setMitDue(e.target.value)} style={{ width:130, flex:'none' }} />
+                    <button className="rips-btn rips-small" onClick={saveMit}>Legg til</button>
+                    <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); }}>Avbryt</button>
+                  </div>
+                </div>
+              )}
+
+              <ul className="rips-mitigations">
+                {risk.mitigations.length === 0 && !addingMit && (
+                  <li style={{ color:'var(--ink-3)', fontStyle:'italic', border:'none', paddingTop:8 }}>Ingen tiltak registrert ennå.</li>
+                )}
+                {risk.mitigations.map(m => (
+                  <li key={m.id}>
+                    <span className={`rips-check ${m.done ? 'done' : ''}`} onClick={() => toggleMit(m.id)} title={m.done ? 'Marker som åpen' : 'Marker som fullført'}>
+                      {m.done && <Icon name="check" size={10} />}
+                    </span>
+                    <span className={m.done ? 'done' : ''} style={{ flex:1 }}>{m.label}</span>
+                    {m.due && <span className="rips-due">{m.due}</span>}
+                    <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-3)' }} onClick={() => removeMit(m.id)}>
+                      <Icon name="x" size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            {log.length > 0 && (
+              <section className="rips-section">
+                <div className="rips-cap" style={{ marginBottom:10 }}>Endringslogg</div>
+                <ol className="rips-activity">
+                  {[...log].reverse().map(entry => (
+                    <li key={entry.id}>
+                      <span className="rips-when mono">{formatTs(entry.ts)}</span>
+                      <span><b>{entry.user}</b> — {entry.text}</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             )}
-            {risk.mitigations.map(m => (
-              <li key={m.id}>
-                <span className={`rips-check ${m.done ? 'done' : ''}`} onClick={() => toggleMit(m.id)} title={m.done ? 'Marker som åpen' : 'Marker som fullført'}>
-                  {m.done && <Icon name="check" size={10} />}
-                </span>
-                <span className={m.done ? 'done' : ''} style={{ flex:1 }}>{m.label}</span>
-                {m.due && <span className="rips-due">{m.due}</span>}
-                <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-3)' }} onClick={() => removeMit(m.id)}>
-                  <Icon name="x" size={12} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+          </>
+        )}
       </aside>
     </>
   );
@@ -1084,7 +1169,7 @@ function CollectionsView({ collections, onSelect, onAdd, onDelete }) {
    VISNING: SAMLING (med matrise og tabell)
 ═══════════════════════════════════════════════════════════════ */
 
-function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateCollection, availableTags, onCreateTag, onDeleteTag }) {
+function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateCollection, availableTags, onCreateTag, onDeleteTag, user }) {
   const [openRiskId,   setOpenRiskId]   = useState(null);
   const [showAddRisk,  setShowAddRisk]  = useState(false);
   const [showEditCol,  setShowEditCol]  = useState(false);
@@ -1195,6 +1280,7 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           availableTags={availableTags}
           onCreateTag={onCreateTag}
           onDeleteTag={onDeleteTag}
+          user={user}
         />
       )}
 
@@ -1304,6 +1390,7 @@ function AppShell({ user, onLogout }) {
             availableTags={availableTags}
             onCreateTag={createTag}
             onDeleteTag={deleteTag}
+            user={user}
           />
         )}
       </main>
