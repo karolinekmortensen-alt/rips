@@ -19,8 +19,8 @@ const { useState, useEffect, useRef } = React;
 /* ═══════════════════════════════════════════════════════════════
    SUPABASE — fyll inn URL og anon-nøkkel fra ditt prosjekt
 ═══════════════════════════════════════════════════════════════ */
-const SUPABASE_URL      = 'https://DIN_PROSJEKT_ID.supabase.co';
-const SUPABASE_ANON_KEY = 'DIN_ANON_NØKKEL';
+const SUPABASE_URL      = 'https://jxmgcjrhajclcqwjyqqn.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4bWdjanJoYWpjbGNxd2p5cXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NzIxOTEsImV4cCI6MjA5NDE0ODE5MX0.QMayjGwuF3yZ-MyCR4GIWDPg5bA8uTCaSMvmObw0Ux0';
 const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Henter visningsnavn fra Supabase-brukerobjekt
