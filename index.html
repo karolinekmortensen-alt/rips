@@ -275,6 +275,59 @@ function TagInput({ selected, onChange, available, onCreateTag, onDeleteTag }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   EIER-VELGER (kobler til registrerte brukere)
+═══════════════════════════════════════════════════════════════ */
+
+function OwnerSelect({ value, onChange, profiles = [], placeholder = 'Søk bruker eller skriv navn…' }) {
+  const [query, setQuery]   = useState(value || '');
+  const [open,  setOpen]    = useState(false);
+  const inputRef            = useRef(null);
+
+  // Sync display when value set externally
+  useEffect(() => { setQuery(value || ''); }, [value]);
+
+  const filtered = profiles.filter(p =>
+    (p.full_name || '').toLowerCase().includes(query.toLowerCase()) ||
+    (p.email     || '').toLowerCase().includes(query.toLowerCase())
+  );
+
+  const initials = (n) => (n || '?').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+
+  const select = (name) => { onChange(name); setQuery(name); setOpen(false); };
+
+  return (
+    <div style={{ position:'relative' }}>
+      <input
+        ref={inputRef}
+        className="rips-input"
+        value={query}
+        onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 160)}
+        placeholder={placeholder}
+      />
+      {open && filtered.length > 0 && (
+        <div className="tag-dropdown">
+          {filtered.map(p => (
+            <div key={p.id} className="tag-option" onMouseDown={() => select(p.full_name || p.email)}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ width:28, height:28, borderRadius:'50%', background:'var(--leaf)', color:'var(--leaf-skin)', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:600, flexShrink:0 }}>
+                  {initials(p.full_name || p.email)}
+                </span>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:500 }}>{p.full_name || p.email}</div>
+                  {p.full_name && <div style={{ fontSize:11, color:'var(--ink-3)' }}>{p.email}</div>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
    VELKOMSTSIDE
 ═══════════════════════════════════════════════════════════════ */
 
@@ -675,7 +728,7 @@ function CommentThread({ comments = [], onAdd, onDelete, inputValue, onInputChan
    RISIKOSKUFF (DRAWER)
 ═══════════════════════════════════════════════════════════════ */
 
-function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {}, user }) {
+function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {}, user, profiles = [] }) {
   const [addingMit,     setAddingMit]     = useState(false);
   const [mitLabel,      setMitLabel]      = useState('');
   const [mitDue,        setMitDue]        = useState('');
@@ -777,7 +830,7 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
           <div style={{ padding:'4px 20px 24px', display:'flex', flexDirection:'column', gap:14 }}>
             <div className="form-group">
               <label className="form-label">Eier</label>
-              <input className="rips-input" value={eOwner} onChange={e => setEOwner(e.target.value)} />
+              <OwnerSelect value={eOwner} onChange={setEOwner} profiles={profiles} />
             </div>
             <div className="form-group">
               <label className="form-label">Tagger</label>
@@ -879,7 +932,7 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
                   <input className="rips-input" placeholder="Beskriv tiltaket…" value={mitLabel} onChange={e => setMitLabel(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') saveMit(); if (e.key === 'Escape') setAddingMit(false); }} autoFocus />
                   <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:8, marginTop:8, alignItems:'center' }}>
-                    <input className="rips-input" placeholder="Ansvarlig" value={mitOwner} onChange={e => setMitOwner(e.target.value)} />
+                    <OwnerSelect value={mitOwner} onChange={setMitOwner} profiles={profiles} placeholder="Ansvarlig…" />
                     <input className="rips-input" type="date" value={mitDue} onChange={e => setMitDue(e.target.value)} style={{ width:148 }} />
                     <button className="rips-btn rips-small" onClick={saveMit}>Legg til</button>
                     <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); setMitOwner(''); }}>Avbryt</button>
@@ -902,7 +955,7 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
                           <input className="rips-input" value={eMitLabel} onChange={e => setEMitLabel(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') saveEditMit(); if (e.key === 'Escape') setEditMitId(null); }} autoFocus />
                           <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:8, alignItems:'center' }}>
-                            <input className="rips-input" placeholder="Ansvarlig" value={eMitOwner} onChange={e => setEMitOwner(e.target.value)} />
+                            <OwnerSelect value={eMitOwner} onChange={setEMitOwner} profiles={profiles} placeholder="Ansvarlig…" />
                             <input className="rips-input" type="date" value={eMitDue} onChange={e => setEMitDue(e.target.value)} style={{ width:148 }} />
                             <button className="rips-btn rips-small" onClick={saveEditMit}>Lagre</button>
                             <button className="rips-btn-ghost rips-small" onClick={() => setEditMitId(null)}>Avbryt</button>
@@ -969,7 +1022,7 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
    MODAL: NY SAMLING
 ═══════════════════════════════════════════════════════════════ */
 
-function AddCollectionModal({ onClose, onAdd }) {
+function AddCollectionModal({ onClose, onAdd, profiles = [] }) {
   const [name,   setName]   = useState('');
   const [desc,   setDesc]   = useState('');
   const [owner,  setOwner]  = useState('');
@@ -1002,7 +1055,7 @@ function AddCollectionModal({ onClose, onAdd }) {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14 }}>
             <div className="form-group">
               <label className="form-label">Eier *</label>
-              <input className="rips-input" value={owner} onChange={e => setOwner(e.target.value)} placeholder="Fornavn Etternavn" required />
+              <OwnerSelect value={owner} onChange={setOwner} profiles={profiles} />
             </div>
             <div className="form-group">
               <label className="form-label">Periode</label>
@@ -1030,7 +1083,7 @@ function AddCollectionModal({ onClose, onAdd }) {
    MODAL: REDIGER SAMLING
 ═══════════════════════════════════════════════════════════════ */
 
-function EditCollectionModal({ collection, onClose, onSave }) {
+function EditCollectionModal({ collection, onClose, onSave, profiles = [] }) {
   const [name,   setName]   = useState(collection.name);
   const [desc,   setDesc]   = useState(collection.description || '');
   const [owner,  setOwner]  = useState(collection.owner);
@@ -1070,7 +1123,7 @@ function EditCollectionModal({ collection, onClose, onSave }) {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14 }}>
             <div className="form-group">
               <label className="form-label">Eier *</label>
-              <input className="rips-input" value={owner} onChange={e => setOwner(e.target.value)} required />
+              <OwnerSelect value={owner} onChange={setOwner} profiles={profiles} />
             </div>
             <div className="form-group">
               <label className="form-label">Periode</label>
@@ -1102,7 +1155,7 @@ function EditCollectionModal({ collection, onClose, onSave }) {
    MODAL: NY RISIKO
 ═══════════════════════════════════════════════════════════════ */
 
-function AddRiskModal({ onClose, onAdd, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {} }) {
+function AddRiskModal({ onClose, onAdd, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {}, profiles = [] }) {
   const [title, setTitle] = useState('');
   const [owner, setOwner] = useState('');
   const [tags,  setTags]  = useState([]);
@@ -1135,7 +1188,7 @@ function AddRiskModal({ onClose, onAdd, scale = 5, availableTags = [], onCreateT
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
             <div className="form-group">
               <label className="form-label">Eier *</label>
-              <input className="rips-input" value={owner} onChange={e => setOwner(e.target.value)} placeholder="Fornavn Etternavn" required />
+              <OwnerSelect value={owner} onChange={setOwner} profiles={profiles} />
             </div>
             <div className="form-group">
               <label className="form-label">Tagger</label>
@@ -1325,7 +1378,7 @@ function CollectionsView({ collections, onSelect, onAdd, onDelete }) {
    VISNING: SAMLING (med matrise og tabell)
 ═══════════════════════════════════════════════════════════════ */
 
-function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateCollection, availableTags, onCreateTag, onDeleteTag, user }) {
+function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateCollection, availableTags, onCreateTag, onDeleteTag, user, profiles = [] }) {
   const [openRiskId,   setOpenRiskId]   = useState(null);
   const [showAddRisk,  setShowAddRisk]  = useState(false);
   const [showEditCol,  setShowEditCol]  = useState(false);
@@ -1437,6 +1490,7 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           onCreateTag={onCreateTag}
           onDeleteTag={onDeleteTag}
           user={user}
+          profiles={profiles}
         />
       )}
 
@@ -1448,6 +1502,7 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           availableTags={availableTags}
           onCreateTag={onCreateTag}
           onDeleteTag={onDeleteTag}
+          profiles={profiles}
         />
       )}
 
@@ -1456,6 +1511,7 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           collection={collection}
           onClose={() => setShowEditCol(false)}
           onSave={updated => { onUpdateCollection(updated); setShowEditCol(false); }}
+          profiles={profiles}
         />
       )}
     </>
@@ -1555,6 +1611,7 @@ function AppShell({ user, onLogout }) {
   const [showAddCol,    setShowAddCol]   = useState(false);
   const [availableTags, setAvailableTags] = useState(INITIAL_TAGS);
   const [dbReady,       setDbReady]      = useState(false);
+  const [profiles,      setProfiles]     = useState([]);
 
   // Load workspace from Supabase on mount
   useEffect(() => {
@@ -1566,6 +1623,7 @@ function AppShell({ user, onLogout }) {
       }
       setDbReady(true);
     });
+    db.from('profiles').select('*').then(({ data }) => { if (data) setProfiles(data); });
   }, []);
 
   // Debounced save to Supabase (800 ms after last change, only after initial load)
@@ -1659,6 +1717,7 @@ function AppShell({ user, onLogout }) {
             onCreateTag={createTag}
             onDeleteTag={deleteTag}
             user={user}
+            profiles={profiles}
           />
         )}
         {view === 'profile' && (
@@ -1670,6 +1729,7 @@ function AppShell({ user, onLogout }) {
         <AddCollectionModal
           onClose={() => setShowAddCol(false)}
           onAdd={col => { addCollection(col); setShowAddCol(false); }}
+          profiles={profiles}
         />
       )}
     </div>
