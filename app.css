@@ -629,8 +629,8 @@ textarea.rips-input { resize: vertical; min-height: 80px; }
 .print-report { display: none; }
 
 @media print {
-  /* Hide everything except the print report */
-  body > #root { display: none !important; }
+  /* Hide the app; print-root is a sibling div so it stays visible */
+  #root { display: none !important; }
   .print-report {
     display: block !important;
     font-family: 'Geist', system-ui, sans-serif;

@@ -13,6 +13,7 @@
 </head>
 <body>
 <div id="root"></div>
+<div id="print-root"></div>
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
 
@@ -1521,7 +1522,8 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
         />
       )}
 
-      {/* ── Print report (hidden on screen, shown when printing) ── */}
+      {/* ── Print report rendered outside #root so @media print can target it ── */}
+      {ReactDOM.createPortal(
       <div className="print-report">
         <div className="print-header">
           <div className="print-logo-row">
@@ -1608,6 +1610,8 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           Generert fra Rips · {new Date().toLocaleString('nb-NO')}
         </div>
       </div>
+      , document.getElementById('print-root')
+      )}
     </>
   );
 }
