@@ -491,10 +491,82 @@ textarea.rips-input { resize: vertical; min-height: 80px; }
   overflow: hidden;
 }
 @keyframes modal-in { from { transform: translateY(10px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
-.modal-head {
+/* ═══════════════════════════════════════════════════════════════
+   TAG INPUT
+═══════════════════════════════════════════════════════════════ */
+.tag-input-wrap { position: relative; }
+.tag-input-field {
   display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
   align-items: center;
-  justify-content: space-between;
-  padding: 18px 24px;
-  border-bottom: 1px solid var(--rule);
+  min-height: 38px;
+  padding: 5px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  background: var(--paper);
+  cursor: text;
+  transition: border-color var(--dur-state) var(--ease);
 }
+.tag-input-field:focus-within { border-color: var(--currant); box-shadow: 0 0 0 2px var(--currant-wash); }
+.tag-pill-sel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 9px;
+  border-radius: 999px;
+  background: var(--currant-wash);
+  color: var(--currant-deep);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.tag-pill-sel button {
+  background: none; border: none; padding: 0; margin: 0;
+  cursor: pointer; color: var(--currant-deep);
+  display: flex; align-items: center; opacity: 0.55; line-height: 1;
+}
+.tag-pill-sel button:hover { opacity: 1; }
+.tag-input-field input {
+  flex: 1; min-width: 100px;
+  border: none; background: transparent; outline: none;
+  font-family: var(--font-sans); font-size: 13px; color: var(--ink); padding: 0;
+}
+.tag-input-field input::placeholder { color: var(--ink-3); }
+.tag-dropdown {
+  position: absolute;
+  top: calc(100% + 3px); left: 0; right: 0;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: var(--shadow-2);
+  z-index: 200;
+  overflow: hidden;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.tag-option {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; font-size: 13px; color: var(--ink);
+  cursor: pointer; transition: background 80ms;
+}
+.tag-option:hover { background: var(--bg-sunken); }
+.tag-option-new { color: var(--currant); font-weight: 500; }
+.tag-option-del {
+  background: none; border: none; padding: 2px 4px;
+  cursor: pointer; color: var(--ink-3);
+  display: flex; align-items: center;
+  opacity: 0; transition: opacity 80ms; border-radius: 3px;
+}
+.tag-option:hover .tag-option-del { opacity: 1; }
+.tag-option-del:hover { color: var(--currant); opacity: 1 !important; }
+/* Small tag pills (read-only display in table/drawer) */
+.tag-pill-sm {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; border-radius: 999px;
+  background: var(--paper-2); color: var(--ink-2);
+  font-size: 11px; font-weight: 500; border: 1px solid var(--rule);
+  white-space: nowrap;
+}
+

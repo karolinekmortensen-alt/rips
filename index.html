@@ -19,15 +19,12 @@ const { useState } = React;
    KONSTANTER OG DATA
 ═══════════════════════════════════════════════════════════════ */
 
-const PROB_LABELS = {
-  1:'Svært liten', 2:'Liten',        3:'Lav',          4:'Under middels', 5:'Moderat',
-  6:'Over middels', 7:'Stor',        8:'Høy',           9:'Svært stor',    10:'Nesten sikkert',
-};
-const CONS_LABELS = {
-  1:'Ubetydelig',  2:'Liten',        3:'Lav',          4:'Under middels', 5:'Moderat',
-  6:'Over middels', 7:'Alvorlig',    8:'Kritisk',       9:'Svært alvorlig',10:'Katastrofalt',
-};
-const CATEGORIES  = ['IT-sikkerhet','Operasjonell','Finansiell','Compliance','HR','Prosjekt','Strategisk'];
+// Label banks — 10 steps each. probLabel/consLabel picks by relative position within scale.
+const PROB_BANK = ['Svært liten','Liten','Lav','Under middels','Moderat','Over middels','Stor','Høy','Svært stor','Nesten sikkert'];
+const CONS_BANK = ['Ubetydelig','Liten','Lav','Under middels','Moderat','Over middels','Alvorlig','Kritisk','Svært alvorlig','Katastrofalt'];
+const probLabel = (p, scale) => scale <= 1 ? PROB_BANK[9] : PROB_BANK[Math.round((p - 1) / (scale - 1) * (PROB_BANK.length - 1))];
+const consLabel = (c, scale) => scale <= 1 ? CONS_BANK[9] : CONS_BANK[Math.round((c - 1) / (scale - 1) * (CONS_BANK.length - 1))];
+const INITIAL_TAGS = ['IT-sikkerhet','Operasjonell','Finansiell','Compliance','HR','Prosjekt','Strategisk'];
 const SEV_LABEL   = { low: 'Lav', medium: 'Moderat', high: 'Høy', critical: 'Kritisk' };
 
 // Alvor beregnes proporsjonalt: score / maxScore med fire soner
@@ -59,7 +56,7 @@ const INITIAL_COLLECTIONS = [
     risks: [
       { id:'R-0001', title:'Datalekkasje, kundedata',
         description:'Penetrasjonstest avdekket utdatert tilgangskontroll på lese-replika. Eksponering ville rammet GDPR.',
-        owner:'Jonas Vik', category:'IT-sikkerhet', p:2, c:5,
+        owner:'Jonas Vik', tags:['IT-sikkerhet'], p:2, c:5,
         mitigations:[
           {id:'M-001',label:'Patche lese-replika',due:'15.08',done:true},
           {id:'M-002',label:'Roter alle tjenestekontoer',due:'19.08',done:true},
@@ -67,21 +64,21 @@ const INITIAL_COLLECTIONS = [
         ]},
       { id:'R-0002', title:'Brann, datasenter Bergen',
         description:'Brannsikring ikke testet siste 24 måneder. DR-plan er utdatert.',
-        owner:'Jonas Vik', category:'IT-sikkerhet', p:1, c:5,
+        owner:'Jonas Vik', tags:['IT-sikkerhet'], p:1, c:5,
         mitigations:[{id:'M-004',label:'Planlegg brannøvelse',due:'30.09',done:false}]},
       { id:'R-0003', title:'Uautorisert tilgang, admin-portal',
         description:'Svak passordpolicy for admin-brukere oppdaget i internrevisjon.',
-        owner:'Sara Eng', category:'IT-sikkerhet', p:3, c:4,
+        owner:'Sara Eng', tags:['IT-sikkerhet'], p:3, c:4,
         mitigations:[
           {id:'M-005',label:'Innfør MFA for alle admins',due:'31.07',done:true},
           {id:'M-006',label:'Gjennomgå tilgangslogg',due:'15.08',done:false},
         ]},
       { id:'R-0004', title:'DDoS mot betalingsportal',
         description:'Manglende rate-limiting og DDoS-beskyttelse avdekket i kapasitetstest.',
-        owner:'Jonas Vik', category:'IT-sikkerhet', p:3, c:3, mitigations:[]},
+        owner:'Jonas Vik', tags:['IT-sikkerhet'], p:3, c:3, mitigations:[]},
       { id:'R-0005', title:'Utdatert tredjeparts avhengighet',
         description:'CVE-2025-11234 i npm-pakke brukt i kundevendt frontend.',
-        owner:'Sara Eng', category:'IT-sikkerhet', p:4, c:2,
+        owner:'Sara Eng', tags:['IT-sikkerhet'], p:4, c:2,
         mitigations:[{id:'M-007',label:'Oppdater pakke til v3.1.2',due:'10.08',done:false}]},
     ],
   },
@@ -92,21 +89,21 @@ const INITIAL_COLLECTIONS = [
     risks: [
       { id:'R-0010', title:'Leverandørmislighold, hovedrammeavtale',
         description:'Sannsynlighet for mislighold økt etter Q2-resultater til hovedleverandør.',
-        owner:'Mari Røst', category:'Operasjonell', p:3, c:4,
+        owner:'Mari Røst', tags:['Operasjonell'], p:3, c:4,
         mitigations:[
           {id:'M-010',label:'Reforhandle SLA innen 1. september',due:'01.09',done:true},
           {id:'M-011',label:'Identifisere reserveleverandør i EØS',due:'15.09',done:false},
         ]},
       { id:'R-0011', title:'Nøkkelperson, leadarkitekt',
         description:'Ingen dokumentert successionsplan for lederrolle med kritisk systemkunnskap.',
-        owner:'Mari Røst', category:'HR', p:2, c:3, mitigations:[]},
+        owner:'Mari Røst', tags:['HR'], p:2, c:3, mitigations:[]},
       { id:'R-0012', title:'Valutaeksponering, EUR-portefølje',
         description:'EUR/NOK volatilitet over historisk gjennomsnitt. Påvirker tre kontrakter.',
-        owner:'Eline Aas', category:'Finansiell', p:4, c:2,
+        owner:'Eline Aas', tags:['Finansiell'], p:4, c:2,
         mitigations:[{id:'M-012',label:'Forward-sikring 60 % av eksponering',due:'05.08',done:true}]},
       { id:'R-0013', title:'Forsinket levering, ny CRM',
         description:'Prosjektet er tre uker forsinket. Kritisk avhengighet til salgsprosessen i Q4.',
-        owner:'Sara Eng', category:'Prosjekt', p:4, c:3, mitigations:[]},
+        owner:'Sara Eng', tags:['Prosjekt'], p:4, c:3, mitigations:[]},
     ],
   },
   {
@@ -116,11 +113,11 @@ const INITIAL_COLLECTIONS = [
     risks: [
       { id:'R-0020', title:'Endring i hvitvaskingsregelverk',
         description:'Nye KYC-krav fra Finanstilsynet trer i kraft 1. oktober.',
-        owner:'Petter Lo', category:'Compliance', p:4, c:3,
+        owner:'Petter Lo', tags:['Compliance'], p:4, c:3,
         mitigations:[{id:'M-020',label:'Kartlegg gap mot nytt regelverk',due:'15.08',done:false}]},
       { id:'R-0021', title:'Manglende segregering, godkjenninger',
         description:'To brukere med overlappende rettigheter oppdaget i internrevisjon.',
-        owner:'Petter Lo', category:'Compliance', p:2, c:2,
+        owner:'Petter Lo', tags:['Compliance'], p:2, c:2,
         mitigations:[{id:'M-021',label:'Gjennomgå rollematrise',due:'31.08',done:false}]},
     ],
   },
@@ -179,6 +176,81 @@ function RipsLogo({ size = 32, bg = 'var(--paper-2)' }) {
       </span>
       ps
     </span>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TAG INPUT
+═══════════════════════════════════════════════════════════════ */
+
+function TagInput({ selected, onChange, available, onCreateTag, onDeleteTag }) {
+  const [query,  setQuery]  = useState('');
+  const [open,   setOpen]   = useState(false);
+  const inputRef = React.useRef(null);
+
+  const filtered  = available.filter(t => t.toLowerCase().includes(query.toLowerCase()) && !selected.includes(t));
+  const canCreate = query.trim() && !available.some(t => t.toLowerCase() === query.trim().toLowerCase());
+
+  const addTag = (tag) => {
+    if (!selected.includes(tag)) onChange([...selected, tag]);
+    setQuery('');
+    inputRef.current?.focus();
+  };
+  const removeTag = (tag) => onChange(selected.filter(t => t !== tag));
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && canCreate) {
+      e.preventDefault();
+      const t = query.trim();
+      onCreateTag(t);
+      addTag(t);
+    } else if (e.key === 'Backspace' && !query && selected.length > 0) {
+      removeTag(selected[selected.length - 1]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="tag-input-wrap">
+      <div className="tag-input-field" onClick={() => { setOpen(true); inputRef.current?.focus(); }}>
+        {selected.map(tag => (
+          <span key={tag} className="tag-pill-sel">
+            {tag}
+            <button type="button" onMouseDown={e => { e.stopPropagation(); removeTag(tag); }} style={{ background:'none', border:'none', cursor:'pointer', color:'inherit', padding:0, display:'inline-flex', lineHeight:1 }}>
+              <Icon name="x" size={10} />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={e => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 160)}
+          onKeyDown={handleKeyDown}
+          placeholder={selected.length === 0 ? 'Velg eller opprett…' : ''}
+          style={{ border:'none', outline:'none', background:'transparent', fontSize:13, minWidth:80, flex:1, padding:0 }}
+        />
+      </div>
+      {open && (filtered.length > 0 || canCreate) && (
+        <div className="tag-dropdown">
+          {filtered.map(tag => (
+            <div key={tag} className="tag-option" onMouseDown={() => addTag(tag)}>
+              <span>{tag}</span>
+              <button type="button" className="tag-option-del" onMouseDown={e => { e.stopPropagation(); onDeleteTag(tag); }} title="Slett tag">
+                <Icon name="x" size={10} />
+              </button>
+            </div>
+          ))}
+          {canCreate && (
+            <div className="tag-option tag-option-new" onMouseDown={() => { const t = query.trim(); onCreateTag(t); addTag(t); }}>
+              + Opprett «{query.trim()}»
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -391,7 +463,7 @@ function RiskMatrix({ risks, onRiskClick, scale = 5 }) {
       {/* X-axis sub-labels — only show for scale ≤ 6 to avoid crowding */}
       {n <= 6 && ticks.map(p => (
         <text key={`xs-${p}`} x={cx(p)} y={H - MB + 30} textAnchor="middle" fontSize={Math.max(7, lblSize - 2)} fill="#8A8275" fontFamily="Geist,system-ui">
-          {PROB_LABELS[p].split(' ')[0]}
+          {probLabel(p, n).split(' ')[0]}
         </text>
       ))}
       <text x={ML + GRID_W/2} y={H - 4} textAnchor="middle" fontSize={10} fill="#8A8275" fontFamily="Geist,system-ui" letterSpacing="0.06em">
@@ -458,7 +530,7 @@ function RiskTable({ risks, onOpen, scale = 5 }) {
           <th style={{ width:84 }}>ID</th>
           <th>Tittel</th>
           <th style={{ width:120 }}>Eier</th>
-          <th style={{ width:120 }}>Kategori</th>
+          <th style={{ width:150 }}>Tagger</th>
           <th style={{ width:100, textAlign:'center' }}>Sannsynlighet</th>
           <th style={{ width:100, textAlign:'center' }}>Konsekvens</th>
           <th style={{ width:100 }}>Alvor</th>
@@ -470,17 +542,23 @@ function RiskTable({ risks, onOpen, scale = 5 }) {
           const sev = getSev(r.p, r.c, scale);
           const done = r.mitigations.filter(m => m.done).length;
           const total = r.mitigations.length;
+          const tags = r.tags || (r.category ? [r.category] : []);
           return (
             <tr key={r.id} onClick={() => onOpen(r.id)}>
               <td className="mono accent">{r.id}</td>
               <td><span style={{ fontWeight:500 }}>{r.title}</span></td>
               <td>{r.owner}</td>
-              <td className="muted">{r.category}</td>
-              <td className="mono" style={{ textAlign:'center' }}>
-                {r.p} <span style={{ color:'var(--ink-3)', fontFamily:'var(--font-sans)', fontSize:11 }}>{PROB_LABELS[r.p]}</span>
+              <td>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:4 }}>
+                  {tags.map(t => <span key={t} className="tag-pill-sm">{t}</span>)}
+                  {tags.length === 0 && <span style={{ color:'var(--ink-3)', fontSize:12 }}>—</span>}
+                </div>
               </td>
               <td className="mono" style={{ textAlign:'center' }}>
-                {r.c} <span style={{ color:'var(--ink-3)', fontFamily:'var(--font-sans)', fontSize:11 }}>{CONS_LABELS[r.c]}</span>
+                {r.p} <span style={{ color:'var(--ink-3)', fontFamily:'var(--font-sans)', fontSize:11 }}>{probLabel(r.p, scale)}</span>
+              </td>
+              <td className="mono" style={{ textAlign:'center' }}>
+                {r.c} <span style={{ color:'var(--ink-3)', fontFamily:'var(--font-sans)', fontSize:11 }}>{consLabel(r.c, scale)}</span>
               </td>
               <td><SevPill sev={sev} /></td>
               <td className="mono" style={{ textAlign:'center', color: total > 0 && done === total ? 'var(--leaf)' : total > 0 ? 'var(--ink-2)' : 'var(--ink-3)' }}>
@@ -498,7 +576,7 @@ function RiskTable({ risks, onOpen, scale = 5 }) {
    RISIKOSKUFF (DRAWER)
 ═══════════════════════════════════════════════════════════════ */
 
-function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5 }) {
+function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {} }) {
   const [addingMit, setAddingMit] = useState(false);
   const [mitLabel, setMitLabel]   = useState('');
   const [mitDue, setMitDue]       = useState('');
@@ -556,17 +634,23 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5 }) {
             <div className="rips-cap">Eier</div>
             <div style={{ fontSize:14 }}>{risk.owner}</div>
           </div>
-          <div className="rips-field">
-            <div className="rips-cap">Kategori</div>
-            <div style={{ fontSize:14 }}>{risk.category}</div>
+          <div className="rips-field" style={{ gridColumn:'1 / -1' }}>
+            <div className="rips-cap" style={{ marginBottom:6 }}>Tagger</div>
+            <TagInput
+              selected={risk.tags || (risk.category ? [risk.category] : [])}
+              onChange={tags => onUpdate({ ...risk, tags, category: undefined })}
+              available={availableTags}
+              onCreateTag={onCreateTag}
+              onDeleteTag={onDeleteTag}
+            />
           </div>
           <div className="rips-field">
             <div className="rips-cap">Sannsynlighet</div>
-            <div className="mono">{risk.p} — {PROB_LABELS[risk.p]}</div>
+            <div className="mono">{risk.p} — {probLabel(risk.p, scale)}</div>
           </div>
           <div className="rips-field">
             <div className="rips-cap">Konsekvens</div>
-            <div className="mono">{risk.c} — {CONS_LABELS[risk.c]}</div>
+            <div className="mono">{risk.c} — {consLabel(risk.c, scale)}</div>
           </div>
           <div className="rips-field">
             <div className="rips-cap">Risikoscore</div>
@@ -777,10 +861,10 @@ function EditCollectionModal({ collection, onClose, onSave }) {
    MODAL: NY RISIKO
 ═══════════════════════════════════════════════════════════════ */
 
-function AddRiskModal({ onClose, onAdd, scale = 5 }) {
+function AddRiskModal({ onClose, onAdd, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {} }) {
   const [title, setTitle] = useState('');
   const [owner, setOwner] = useState('');
-  const [cat,   setCat]   = useState('IT-sikkerhet');
+  const [tags,  setTags]  = useState([]);
   const [p,     setP]     = useState(Math.ceil(scale / 2));
   const [c,     setC]     = useState(Math.ceil(scale / 2));
   const [desc,  setDesc]  = useState('');
@@ -791,7 +875,7 @@ function AddRiskModal({ onClose, onAdd, scale = 5 }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!title.trim() || !owner.trim()) return;
-    onAdd({ id: uid('R'), title: title.trim(), owner: owner.trim(), category: cat, p: Number(p), c: Number(c), description: desc.trim(), mitigations: [] });
+    onAdd({ id: uid('R'), title: title.trim(), owner: owner.trim(), tags, p: Number(p), c: Number(c), description: desc.trim(), mitigations: [] });
     onClose();
   };
 
@@ -813,23 +897,27 @@ function AddRiskModal({ onClose, onAdd, scale = 5 }) {
               <input className="rips-input" value={owner} onChange={e => setOwner(e.target.value)} placeholder="Fornavn Etternavn" required />
             </div>
             <div className="form-group">
-              <label className="form-label">Kategori</label>
-              <select className="rips-input rips-select" value={cat} onChange={e => setCat(e.target.value)}>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <label className="form-label">Tagger</label>
+              <TagInput
+                selected={tags}
+                onChange={setTags}
+                available={availableTags}
+                onCreateTag={onCreateTag}
+                onDeleteTag={onDeleteTag}
+              />
             </div>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14, alignItems:'start' }}>
             <div className="form-group">
               <label className="form-label">Sannsynlighet (1–{scale})</label>
               <select className="rips-input rips-select" value={p} onChange={e => setP(Number(e.target.value))}>
-                {ticks.map(v => <option key={v} value={v}>{v} — {PROB_LABELS[v]}</option>)}
+                {ticks.map(v => <option key={v} value={v}>{v} — {probLabel(v, scale)}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Konsekvens (1–{scale})</label>
               <select className="rips-input rips-select" value={c} onChange={e => setC(Number(e.target.value))}>
-                {ticks.map(v => <option key={v} value={v}>{v} — {CONS_LABELS[v]}</option>)}
+                {ticks.map(v => <option key={v} value={v}>{v} — {consLabel(v, scale)}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -996,7 +1084,7 @@ function CollectionsView({ collections, onSelect, onAdd, onDelete }) {
    VISNING: SAMLING (med matrise og tabell)
 ═══════════════════════════════════════════════════════════════ */
 
-function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateCollection }) {
+function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateCollection, availableTags, onCreateTag, onDeleteTag }) {
   const [openRiskId,   setOpenRiskId]   = useState(null);
   const [showAddRisk,  setShowAddRisk]  = useState(false);
   const [showEditCol,  setShowEditCol]  = useState(false);
@@ -1104,6 +1192,9 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           onUpdate={updated => { onUpdateRisk(updated); }}
           onDelete={id => { onDeleteRisk(id); setOpenRiskId(null); }}
           scale={scale}
+          availableTags={availableTags}
+          onCreateTag={onCreateTag}
+          onDeleteTag={onDeleteTag}
         />
       )}
 
@@ -1112,6 +1203,9 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           onClose={() => setShowAddRisk(false)}
           onAdd={risk => { onAddRisk(risk); setShowAddRisk(false); }}
           scale={scale}
+          availableTags={availableTags}
+          onCreateTag={onCreateTag}
+          onDeleteTag={onDeleteTag}
         />
       )}
 
@@ -1131,10 +1225,14 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
 ═══════════════════════════════════════════════════════════════ */
 
 function AppShell({ user, onLogout }) {
-  const [view,       setViewRaw]           = useState('dashboard');
-  const [collections, setCollections]      = useState(INITIAL_COLLECTIONS);
-  const [selectedId, setSelectedId]        = useState(null);
-  const [showAddCol, setShowAddCol]        = useState(false);
+  const [view,          setViewRaw]      = useState('dashboard');
+  const [collections,   setCollections]  = useState(INITIAL_COLLECTIONS);
+  const [selectedId,    setSelectedId]   = useState(null);
+  const [showAddCol,    setShowAddCol]   = useState(false);
+  const [availableTags, setAvailableTags] = useState(INITIAL_TAGS);
+
+  const createTag  = (name) => setAvailableTags(prev => prev.includes(name) ? prev : [...prev, name]);
+  const deleteTag  = (name) => setAvailableTags(prev => prev.filter(t => t !== name));
 
   const setView = (v) => {
     setViewRaw(v);
@@ -1203,6 +1301,9 @@ function AppShell({ user, onLogout }) {
             onUpdateRisk={updateRisk}
             onDeleteRisk={deleteRisk}
             onUpdateCollection={updateCollection}
+            availableTags={availableTags}
+            onCreateTag={createTag}
+            onDeleteTag={deleteTag}
           />
         )}
       </main>
