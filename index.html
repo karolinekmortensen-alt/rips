@@ -49,6 +49,8 @@ const getSev = (p, c, scale = 5) => {
 
 const ZONE_BG  = { low: '#DDE7D5', medium: '#F5E5C3', high: '#F3D9DD', critical: '#E4A5AE' };
 const SEV_DOT  = { low: '#2F5236', medium: '#B8761C', high: '#B11E3A', critical: '#7A1226' };
+const SEV_BG_PRINT = { low: '#DDE7D5', medium: '#F5E5C3', high: '#F3D9DD', critical: '#E4A5AE' };
+const SEV_FG_PRINT = { low: '#1A3320', medium: '#6B420A', high: '#6B0F20', critical: '#4A0A14' };
 const SEV_PILL = {
   low:      { bg: '#DDE7D5', fg: '#1F381F' },
   medium:   { bg: '#F5E5C3', fg: '#7A4E0F' },
@@ -167,6 +169,7 @@ function Icon({ name, size = 16, color }) {
     case 'trash':   return <svg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6M9 6V4h6v2"/></svg>;
     case 'edit':    return <svg {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>;
     case 'user':    return <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+    case 'printer': return <svg {...p}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>;
     default:        return null;
   }
 }
@@ -1409,6 +1412,9 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
             </div>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <button className="rips-btn-secondary" onClick={() => window.print()} title="Skriv ut / Lagre som PDF">
+              <Icon name="printer" size={14} /> Skriv ut
+            </button>
             <button className="rips-btn-secondary" onClick={() => setShowEditCol(true)}>
               <Icon name="edit" size={14} /> Rediger
             </button>
@@ -1514,6 +1520,94 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           profiles={profiles}
         />
       )}
+
+      {/* ── Print report (hidden on screen, shown when printing) ── */}
+      <div className="print-report">
+        <div className="print-header">
+          <div className="print-logo-row">
+            <RipsLogo size={28} bg="var(--paper)" />
+            <span className="print-app-name">Rips</span>
+          </div>
+          <div className="print-meta">
+            {collection.owner && <span>{collection.owner}</span>}
+            {collection.period && <span>{collection.period}</span>}
+            <span>Skala {scale}×{scale}</span>
+            <span>{new Date().toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' })}</span>
+          </div>
+        </div>
+        <h1 className="print-title">{collection.name}</h1>
+        {collection.description && <p className="print-desc">{collection.description}</p>}
+
+        <div className="print-matrix-section">
+          <div className="print-section-label">Risikomatrise — sannsynlighet × konsekvens ({scale}×{scale})</div>
+          <div className="print-matrix-wrap">
+            <RiskMatrix risks={collection.risks} onRiskClick={() => {}} scale={scale} />
+          </div>
+          <div className="print-legend">
+            {['low','medium','high','critical'].map(s => (
+              <div key={s} className="print-legend-item">
+                <span className="print-dot" style={{ background: SEV_DOT[s] }}></span>
+                {SEV_LABEL[s]} ({sevCounts[s] || 0})
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="print-section-label" style={{ marginTop:28, marginBottom:10 }}>Risikoregister</div>
+        <table className="print-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Tittel</th>
+              <th>Eier</th>
+              <th>S</th>
+              <th>K</th>
+              <th>Alvor</th>
+              <th>Tiltak</th>
+            </tr>
+          </thead>
+          <tbody>
+            {collection.risks.map(r => {
+              const sev = getSev(r.p, r.c, scale);
+              const done = r.mitigations.filter(m => m.done).length;
+              return (
+                <tr key={r.id}>
+                  <td className="print-mono">{r.id}</td>
+                  <td>{r.title}</td>
+                  <td>{r.owner || '—'}</td>
+                  <td className="print-mono print-center">{r.p}</td>
+                  <td className="print-mono print-center">{r.c}</td>
+                  <td><span className="print-sev" style={{ background: SEV_BG_PRINT[sev], color: SEV_FG_PRINT[sev] }}>{SEV_LABEL[sev]}</span></td>
+                  <td className="print-mono print-center">{r.mitigations.length > 0 ? `${done}/${r.mitigations.length}` : '—'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {collection.risks.some(r => r.mitigations.length > 0) && (
+          <>
+            <div className="print-section-label" style={{ marginTop:28, marginBottom:10 }}>Tiltak</div>
+            {collection.risks.filter(r => r.mitigations.length > 0).map(r => (
+              <div key={r.id} className="print-mit-group">
+                <div className="print-mit-risk">{r.id} — {r.title}</div>
+                {r.mitigations.map(m => (
+                  <div key={m.id} className="print-mit-row">
+                    <span className={`print-check ${m.done ? 'done' : ''}`}>{m.done ? '✓' : '○'}</span>
+                    <span className="print-mit-label">{m.label}</span>
+                    {m.owner && <span className="print-mit-meta">{m.owner}</span>}
+                    {m.due   && <span className="print-mit-meta">{formatDate(m.due)}</span>}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </>
+        )}
+
+        <div className="print-footer">
+          Generert fra Rips · {new Date().toLocaleString('nb-NO')}
+        </div>
+      </div>
     </>
   );
 }
