@@ -490,6 +490,13 @@ textarea.rips-input { resize: vertical; min-height: 80px; }
   animation: modal-in 220ms var(--ease);
   overflow: hidden;
 }
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 16px;
+  border-bottom: 1px solid var(--rule);
+}
 @keyframes modal-in { from { transform: translateY(10px) scale(0.98); opacity: 0; } to { transform: none; opacity: 1; } }
 /* ═══════════════════════════════════════════════════════════════
    TAG INPUT
