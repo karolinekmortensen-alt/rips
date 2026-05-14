@@ -693,14 +693,14 @@ function RiskTable({ risks, onOpen, scale = 5 }) {
         </tr>
       </thead>
       <tbody>
-        {risks.map(r => {
+        {risks.map((r, i) => {
           const sev = getSev(r.p, r.c, scale);
           const done = r.mitigations.filter(m => m.done).length;
           const total = r.mitigations.length;
           const tags = r.tags || (r.category ? [r.category] : []);
           return (
             <tr key={r.id} onClick={() => onOpen(r.id)}>
-              <td className="mono accent">{r.id}</td>
+              <td className="mono accent">#{i + 1}</td>
               <td><span style={{ fontWeight:500 }}>{r.title}</span></td>
               <td>{r.owner}</td>
               <td>
