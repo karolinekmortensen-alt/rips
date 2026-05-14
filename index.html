@@ -480,13 +480,32 @@ function RiskMatrix({ risks, onRiskClick, scale = 5, trajectories = null, mitTra
   const CH = GRID_H / n;
   const W  = ML + GRID_W + MR;
   const H  = MT + GRID_H + MB;
-  const dotR = Math.max(5, Math.min(10, CW * 0.22));
+  const dotR = Math.max(10, Math.min(13, CW * 0.25));
   const lblSize = Math.max(8, Math.min(11, 11 * 5 / n));
 
   const cx = (p) => ML + (p - 1) * CW + CW / 2;
   const cy = (c) => MT + (n - c) * CH + CH / 2;
 
   const ticks = Array.from({ length: n }, (_, i) => i + 1);
+
+  // Index map: riskId → 1-based position in risks array
+  const riskIndex = Object.fromEntries(risks.map((r, i) => [r.id, i + 1]));
+
+  // Compute 2D offsets for a group of dots spread within a cell
+  function groupOffsets(count) {
+    if (count === 1) return [{ dx: 0, dy: 0 }];
+    const cols = count <= 2 ? 2 : count <= 4 ? 2 : count <= 6 ? 3 : Math.ceil(Math.sqrt(count));
+    const rows = Math.ceil(count / cols);
+    const pad  = dotR + 3;
+    const sx = Math.min((CW - 2 * pad) / Math.max(cols - 1, 1), dotR * 2.6);
+    const sy = Math.min((CH - 2 * pad) / Math.max(rows - 1, 1), dotR * 2.6);
+    return Array.from({ length: count }, (_, i) => {
+      const col      = i % cols;
+      const row      = Math.floor(i / cols);
+      const rowCount = Math.min(cols, count - row * cols);
+      return { dx: (col - (rowCount - 1) / 2) * sx, dy: (row - (rows - 1) / 2) * sy };
+    });
+  }
 
   // Group risks at same cell
   const groups = {};
@@ -613,15 +632,19 @@ function RiskMatrix({ risks, onRiskClick, scale = 5, trajectories = null, mitTra
       {/* Risk dots */}
       {Object.entries(groups).map(([key, grp]) => {
         const [p, c] = key.split(',').map(Number);
+        const offsets = groupOffsets(grp.length);
         return grp.map((r, idx) => {
-          const sev = getSev(r.p, r.c, n);
-          const offset = grp.length > 1 ? (idx - (grp.length - 1) / 2) * (dotR * 2 + 2) : 0;
-          const dotX = cx(p) + offset;
-          const dotY = cy(c);
+          const sev   = getSev(r.p, r.c, n);
+          const dotX  = cx(p) + offsets[idx].dx;
+          const dotY  = cy(c) + offsets[idx].dy;
           const isHov = hovered?.id === r.id;
+          const num   = riskIndex[r.id];
+          const r2    = isHov ? dotR + 2 : dotR;
+          const fs    = num > 9 ? Math.max(6, r2 * 0.62) : Math.max(7, r2 * 0.75);
           return (
             <g key={r.id} style={{ cursor:'pointer' }} onClick={() => onRiskClick(r.id)} onMouseEnter={() => setHovered(r)} onMouseLeave={() => setHovered(null)}>
-              <circle cx={dotX} cy={dotY} r={isHov ? dotR + 2 : dotR} fill={SEV_DOT[sev]} stroke="white" strokeWidth={1.5} opacity={hovered && !isHov ? 0.45 : 1} style={{ transition:'r 80ms, opacity 80ms' }} />
+              <circle cx={dotX} cy={dotY} r={r2} fill={SEV_DOT[sev]} stroke="white" strokeWidth={1.5} opacity={hovered && !isHov ? 0.45 : 1} style={{ transition:'r 80ms, opacity 80ms' }} />
+              <text x={dotX} y={dotY + fs * 0.37} textAnchor="middle" fontSize={fs} fill="white" fontFamily="Geist,system-ui" fontWeight="600" style={{ pointerEvents:'none', userSelect:'none' }}>{num}</text>
             </g>
           );
         });
