@@ -448,6 +448,17 @@ function TopBar({ crumbs, user }) {
    RISIKOMATRISE (SVG 5×5)
 ═══════════════════════════════════════════════════════════════ */
 
+function getMitEffectTrajectory(risk, scale) {
+  const pending = risk.mitigations.filter(m => !m.done && (m.deltaP || m.deltaC));
+  if (pending.length === 0) return null;
+  const dP = pending.reduce((s, m) => s + (m.deltaP || 0), 0);
+  const dC = pending.reduce((s, m) => s + (m.deltaC || 0), 0);
+  const projP = Math.max(1, Math.min(scale, risk.p + dP));
+  const projC = Math.max(1, Math.min(scale, risk.c + dC));
+  if (projP === risk.p && projC === risk.c) return null;
+  return [{ p: risk.p, c: risk.c }, { p: projP, c: projC }];
+}
+
 function getRiskTrajectory(risk) {
   const entries = (risk.log || [])
     .filter(e => e.prevP !== undefined)
@@ -458,7 +469,7 @@ function getRiskTrajectory(risk) {
   return points;
 }
 
-function RiskMatrix({ risks, onRiskClick, scale = 5, trajectories = null }) {
+function RiskMatrix({ risks, onRiskClick, scale = 5, trajectories = null, mitTrajectories = null }) {
   const [hovered, setHovered] = useState(null);
   const n = scale;
 
@@ -541,6 +552,38 @@ function RiskMatrix({ risks, onRiskClick, scale = 5, trajectories = null }) {
                 stroke="white" strokeWidth={1.5}
               />
             ))}
+          </g>
+        );
+      })}
+
+      {/* Mitigation effect trajectories (projected) */}
+      {mitTrajectories && (
+        <defs>
+          <marker id="rips-mit-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#2F5236" />
+          </marker>
+        </defs>
+      )}
+      {mitTrajectories && risks.map(r => {
+        const traj = mitTrajectories[r.id];
+        if (!traj || traj.length < 2) return null;
+        const x1 = cx(traj[0].p), y1 = cy(traj[0].c);
+        const x2 = cx(traj[1].p), y2 = cy(traj[1].c);
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.sqrt(dx*dx + dy*dy);
+        if (len < 1) return null;
+        const shrink = dotR + 3;
+        const ux = dx/len, uy = dy/len;
+        return (
+          <g key={`mit-${r.id}`} pointerEvents="none">
+            <line
+              x1={x1 + ux*shrink} y1={y1 + uy*shrink}
+              x2={x2 - ux*(shrink+4)} y2={y2 - uy*(shrink+4)}
+              stroke="#2F5236" strokeWidth={1.5} strokeDasharray="3,3"
+              markerEnd="url(#rips-mit-arrow)"
+            />
+            <circle cx={x2} cy={y2} r={dotR} fill={SEV_DOT[getSev(traj[1].p, traj[1].c, n)]}
+              opacity={0.35} stroke="#2F5236" strokeWidth={1.5} strokeDasharray="3,2" />
           </g>
         );
       })}
@@ -720,6 +763,10 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
   const [eMitLabel,     setEMitLabel]     = useState('');
   const [eMitOwner,     setEMitOwner]     = useState('');
   const [eMitDue,       setEMitDue]       = useState('');
+  const [mitDeltaP,     setMitDeltaP]     = useState('');
+  const [mitDeltaC,     setMitDeltaC]     = useState('');
+  const [eMitDeltaP,    setEMitDeltaP]    = useState('');
+  const [eMitDeltaC,    setEMitDeltaC]    = useState('');
   const [editing,       setEditing]       = useState(false);
   const [eTitle,        setETitle]        = useState('');
   const [eOwner,        setEOwner]        = useState('');
@@ -765,20 +812,36 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
     setEditing(false);
   };
 
-  const toggleMit       = (id) => onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === id ? { ...m, done: !m.done } : m) });
+  const toggleMit = (id) => {
+    const m = risk.mitigations.find(m => m.id === id);
+    const markingDone = !m.done;
+    if (markingDone && (m.deltaP || m.deltaC)) {
+      const projP = Math.max(1, Math.min(scale, risk.p + (m.deltaP || 0)));
+      const projC = Math.max(1, Math.min(scale, risk.c + (m.deltaC || 0)));
+      const changes = [m.deltaP && `S: ${risk.p} → ${projP}`, m.deltaC && `K: ${risk.c} → ${projC}`].filter(Boolean).join(', ');
+      if (confirm(`Tiltaket har forventet effekt (${changes}).\nVil du oppdatere risikoen nå?`)) {
+        const newLog = [...(risk.log || []), { id: uid('L'), ts: Date.now(), user: who, prevP: risk.p, prevC: risk.c, newP: projP, newC: projC, text: `Risiko oppdatert basert på tiltak: «${m.label}»` }];
+        onUpdate({ ...risk, p: projP, c: projC, log: newLog, mitigations: risk.mitigations.map(mit => mit.id === id ? { ...mit, done: true } : mit) });
+        return;
+      }
+    }
+    onUpdate({ ...risk, mitigations: risk.mitigations.map(mit => mit.id === id ? { ...mit, done: !mit.done } : mit) });
+  };
   const removeMit       = (id) => onUpdate({ ...risk, mitigations: risk.mitigations.filter(m => m.id !== id) });
   const saveMit         = () => {
     if (!mitLabel.trim()) return;
-    onUpdate({ ...risk, mitigations: [...risk.mitigations, { id: uid('M'), label: mitLabel.trim(), due: mitDue.trim(), owner: mitOwner.trim(), done: false, comments: [] }] });
-    setMitLabel(''); setMitDue(''); setMitOwner(''); setAddingMit(false);
+    const dP = parseInt(mitDeltaP) || 0, dC = parseInt(mitDeltaC) || 0;
+    onUpdate({ ...risk, mitigations: [...risk.mitigations, { id: uid('M'), label: mitLabel.trim(), due: mitDue.trim(), owner: mitOwner.trim(), done: false, comments: [], deltaP: dP, deltaC: dC }] });
+    setMitLabel(''); setMitDue(''); setMitOwner(''); setMitDeltaP(''); setMitDeltaC(''); setAddingMit(false);
   };
 
   const toggleMitExpand  = (id) => setExpandedMitIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
-  const startEditMit = (m) => { setEditMitId(m.id); setEMitLabel(m.label); setEMitOwner(m.owner || ''); setEMitDue(m.due || ''); };
+  const startEditMit = (m) => { setEditMitId(m.id); setEMitLabel(m.label); setEMitOwner(m.owner || ''); setEMitDue(m.due || ''); setEMitDeltaP(m.deltaP || ''); setEMitDeltaC(m.deltaC || ''); };
   const saveEditMit  = () => {
     if (!eMitLabel.trim()) return;
-    onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === editMitId ? { ...m, label: eMitLabel.trim(), owner: eMitOwner.trim(), due: eMitDue } : m) });
+    const dP = parseInt(eMitDeltaP) || 0, dC = parseInt(eMitDeltaC) || 0;
+    onUpdate({ ...risk, mitigations: risk.mitigations.map(m => m.id === editMitId ? { ...m, label: eMitLabel.trim(), owner: eMitOwner.trim(), due: eMitDue, deltaP: dP, deltaC: dC } : m) });
     setEditMitId(null);
   };
 
@@ -924,12 +987,19 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
               {addingMit && (
                 <div className="mit-add-form">
                   <input className="rips-input" placeholder="Beskriv tiltaket…" value={mitLabel} onChange={e => setMitLabel(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveMit(); if (e.key === 'Escape') setAddingMit(false); }} autoFocus />
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:8, marginTop:8, alignItems:'center' }}>
+                    onKeyDown={e => { if (e.key === 'Escape') setAddingMit(false); }} autoFocus />
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:8, marginTop:8, alignItems:'center' }}>
                     <OwnerSelect value={mitOwner} onChange={setMitOwner} profiles={profiles} placeholder="Ansvarlig…" />
                     <input className="rips-input" type="date" value={mitDue} onChange={e => setMitDue(e.target.value)} style={{ width:148 }} />
+                    <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                      <span style={{ fontSize:11, color:'var(--ink-3)', whiteSpace:'nowrap' }}>Effekt:</span>
+                      <input className="rips-input" type="number" value={mitDeltaP} onChange={e => setMitDeltaP(e.target.value)} placeholder="ΔS" title="Endring i sannsynlighet (negativt = bedre)" style={{ width:52, textAlign:'center', padding:'6px 4px' }} />
+                      <input className="rips-input" type="number" value={mitDeltaC} onChange={e => setMitDeltaC(e.target.value)} placeholder="ΔK" title="Endring i konsekvens (negativt = bedre)" style={{ width:52, textAlign:'center', padding:'6px 4px' }} />
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:8, marginTop:8 }}>
                     <button className="rips-btn rips-small" onClick={saveMit}>Legg til</button>
-                    <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); setMitOwner(''); }}>Avbryt</button>
+                    <button className="rips-btn-ghost rips-small" onClick={() => { setAddingMit(false); setMitLabel(''); setMitDue(''); setMitOwner(''); setMitDeltaP(''); setMitDeltaC(''); }}>Avbryt</button>
                   </div>
                 </div>
               )}
@@ -948,9 +1018,16 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
                         <div style={{ display:'flex', flexDirection:'column', gap:8, padding:'6px 0' }}>
                           <input className="rips-input" value={eMitLabel} onChange={e => setEMitLabel(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') saveEditMit(); if (e.key === 'Escape') setEditMitId(null); }} autoFocus />
-                          <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:8, alignItems:'center' }}>
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr auto auto', gap:8, alignItems:'center' }}>
                             <OwnerSelect value={eMitOwner} onChange={setEMitOwner} profiles={profiles} placeholder="Ansvarlig…" />
                             <input className="rips-input" type="date" value={eMitDue} onChange={e => setEMitDue(e.target.value)} style={{ width:148 }} />
+                            <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                              <span style={{ fontSize:11, color:'var(--ink-3)', whiteSpace:'nowrap' }}>Effekt:</span>
+                              <input className="rips-input" type="number" value={eMitDeltaP} onChange={e => setEMitDeltaP(e.target.value)} placeholder="ΔS" title="Endring i sannsynlighet" style={{ width:52, textAlign:'center', padding:'6px 4px' }} />
+                              <input className="rips-input" type="number" value={eMitDeltaC} onChange={e => setEMitDeltaC(e.target.value)} placeholder="ΔK" title="Endring i konsekvens" style={{ width:52, textAlign:'center', padding:'6px 4px' }} />
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', gap:8, marginTop:8 }}>
                             <button className="rips-btn rips-small" onClick={saveEditMit}>Lagre</button>
                             <button className="rips-btn-ghost rips-small" onClick={() => setEditMitId(null)}>Avbryt</button>
                           </div>
@@ -964,6 +1041,11 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
                             <div className={m.done ? 'done' : ''}>{m.label}</div>
                             {m.owner && <div style={{ fontSize:11, color:'var(--ink-3)', marginTop:1 }}>{m.owner}</div>}
                           </div>
+                          {(m.deltaP || m.deltaC) && (
+                            <span style={{ fontSize:10, color: 'var(--leaf)', background:'var(--leaf-wash)', borderRadius:3, padding:'1px 5px', whiteSpace:'nowrap', fontFamily:'var(--font-mono)', flexShrink:0 }}>
+                              {[m.deltaP && `ΔS${m.deltaP > 0 ? '+' : ''}${m.deltaP}`, m.deltaC && `ΔK${m.deltaC > 0 ? '+' : ''}${m.deltaC}`].filter(Boolean).join(' ')}
+                            </span>
+                          )}
                           {m.due && <span className="rips-due">{formatDate(m.due)}</span>}
                           <button className="rips-btn-ghost" style={{ padding:'2px 4px', height:'auto', color:'var(--ink-2)' }} onClick={() => startEditMit(m)} title="Rediger tiltak">
                             <Icon name="edit" size={11} />
@@ -1376,13 +1458,18 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
   const [openRiskId,   setOpenRiskId]   = useState(null);
   const [showAddRisk,  setShowAddRisk]  = useState(false);
   const [showEditCol,  setShowEditCol]  = useState(false);
-  const [showHistory,  setShowHistory]  = useState(false);
+  const [showHistory,    setShowHistory]    = useState(false);
+  const [showMitEffect,  setShowMitEffect]  = useState(false);
   const scale = collection.scale || 5;
 
   const trajectories = showHistory
     ? Object.fromEntries(collection.risks.map(r => [r.id, getRiskTrajectory(r)]).filter(([, t]) => t))
     : null;
-  const hasHistory = collection.risks.some(r => getRiskTrajectory(r));
+  const mitTrajectories = showMitEffect
+    ? Object.fromEntries(collection.risks.map(r => [r.id, getMitEffectTrajectory(r, scale)]).filter(([, t]) => t))
+    : null;
+  const hasHistory    = collection.risks.some(r => getRiskTrajectory(r));
+  const hasMitEffects = collection.risks.some(r => getMitEffectTrajectory(r, scale));
 
   const openRisk  = collection.risks.find(r => r.id === openRiskId);
   const sevCounts = collection.risks.reduce((acc, r) => {
@@ -1431,19 +1518,32 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
             <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, padding:20 }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
                 <div className="rips-cap">Risikomatrise — sannsynlighet × konsekvens ({scale}×{scale})</div>
-                {hasHistory && (
-                  <button
-                    className={`rips-btn-ghost rips-small ${showHistory ? 'active' : ''}`}
-                    style={{ fontSize:11, color: showHistory ? 'var(--currant)' : 'var(--ink-2)', display:'flex', alignItems:'center', gap:5 }}
-                    onClick={() => setShowHistory(h => !h)}
-                    title="Vis bevegelse i matrisen basert på endringslogg"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-                    {showHistory ? 'Skjul utvikling' : 'Vis utvikling'}
-                  </button>
-                )}
+                <div style={{ display:'flex', gap:6 }}>
+                  {hasHistory && (
+                    <button
+                      className="rips-btn-ghost rips-small"
+                      style={{ fontSize:11, color: showHistory ? 'var(--currant)' : 'var(--ink-2)', display:'flex', alignItems:'center', gap:5 }}
+                      onClick={() => setShowHistory(h => !h)}
+                      title="Vis historisk bevegelse basert på endringslogg"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                      {showHistory ? 'Skjul historikk' : 'Vis historikk'}
+                    </button>
+                  )}
+                  {hasMitEffects && (
+                    <button
+                      className="rips-btn-ghost rips-small"
+                      style={{ fontSize:11, color: showMitEffect ? 'var(--leaf)' : 'var(--ink-2)', display:'flex', alignItems:'center', gap:5 }}
+                      onClick={() => setShowMitEffect(h => !h)}
+                      title="Vis projisert posisjon dersom alle gjenstående tiltak med effekt gjennomføres"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                      {showMitEffect ? 'Skjul tiltakseffekt' : 'Vis tiltakseffekt'}
+                    </button>
+                  )}
+                </div>
               </div>
-              <RiskMatrix risks={collection.risks} onRiskClick={id => setOpenRiskId(id)} scale={scale} trajectories={trajectories} />
+              <RiskMatrix risks={collection.risks} onRiskClick={id => setOpenRiskId(id)} scale={scale} trajectories={trajectories} mitTrajectories={mitTrajectories} />
               <div style={{ display:'flex', gap:20, marginTop:14, flexWrap:'wrap', alignItems:'center' }}>
                 {['low','medium','high','critical'].map(s => (
                   <div key={s} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink-2)' }}>
@@ -1454,7 +1554,13 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
                 {showHistory && (
                   <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink-2)', marginLeft:'auto' }}>
                     <svg width="22" height="10" viewBox="0 0 22 10"><line x1="0" y1="5" x2="16" y2="5" stroke="#5C544A" strokeWidth="1.5" strokeDasharray="4,3"/><path d="M13,1 L13,9 L21,5 z" fill="#5C544A"/><circle cx="0" cy="5" r="4" fill="#5C544A" opacity="0.28"/></svg>
-                    Tidligere posisjon → nåværende
+                    Tidligere → nåværende
+                  </div>
+                )}
+                {showMitEffect && (
+                  <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'var(--leaf)', marginLeft: showHistory ? 0 : 'auto' }}>
+                    <svg width="22" height="10" viewBox="0 0 22 10"><line x1="0" y1="5" x2="14" y2="5" stroke="#2F5236" strokeWidth="1.5" strokeDasharray="3,3"/><path d="M12,1 L12,9 L21,5 z" fill="#2F5236"/><circle cx="21" cy="5" r="4" fill="#2F5236" opacity="0.35" stroke="#2F5236" strokeWidth="1.5"/></svg>
+                    Nåværende → etter tiltak
                   </div>
                 )}
               </div>
