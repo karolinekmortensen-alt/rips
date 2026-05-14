@@ -448,7 +448,17 @@ function TopBar({ crumbs, user }) {
    RISIKOMATRISE (SVG 5×5)
 ═══════════════════════════════════════════════════════════════ */
 
-function RiskMatrix({ risks, onRiskClick, scale = 5 }) {
+function getRiskTrajectory(risk) {
+  const entries = (risk.log || [])
+    .filter(e => e.prevP !== undefined)
+    .sort((a, b) => a.ts - b.ts);
+  if (entries.length === 0) return null;
+  const points = [{ p: entries[0].prevP, c: entries[0].prevC }];
+  for (const e of entries) points.push({ p: e.newP, c: e.newC });
+  return points;
+}
+
+function RiskMatrix({ risks, onRiskClick, scale = 5, trajectories = null }) {
   const [hovered, setHovered] = useState(null);
   const n = scale;
 
@@ -492,6 +502,48 @@ function RiskMatrix({ risks, onRiskClick, scale = 5 }) {
 
       {/* Outer border */}
       <rect x={ML} y={MT} width={GRID_W} height={GRID_H} fill="none" stroke="var(--rule-strong)" strokeWidth={1} />
+
+      {/* Trajectory arrows (history mode) */}
+      {trajectories && (
+        <defs>
+          <marker id="rips-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill="#5C544A" />
+          </marker>
+        </defs>
+      )}
+      {trajectories && risks.map(r => {
+        const traj = trajectories[r.id];
+        if (!traj || traj.length < 2) return null;
+        return (
+          <g key={`traj-${r.id}`} pointerEvents="none">
+            {traj.map((pt, i) => {
+              if (i === traj.length - 1) return null;
+              const x1 = cx(pt.p), y1 = cy(pt.c);
+              const x2 = cx(traj[i+1].p), y2 = cy(traj[i+1].c);
+              const dx = x2 - x1, dy = y2 - y1;
+              const len = Math.sqrt(dx*dx + dy*dy);
+              if (len < 1) return null;
+              const shrink = dotR + 3;
+              const ux = dx / len, uy = dy / len;
+              return (
+                <line key={i}
+                  x1={x1 + ux * shrink} y1={y1 + uy * shrink}
+                  x2={x2 - ux * (shrink + 4)} y2={y2 - uy * (shrink + 4)}
+                  stroke="#5C544A" strokeWidth={1.5} strokeDasharray="5,3"
+                  markerEnd="url(#rips-arrow)"
+                />
+              );
+            })}
+            {traj.slice(0, -1).map((pt, i) => (
+              <circle key={`ghost-${i}`}
+                cx={cx(pt.p)} cy={cy(pt.c)} r={dotR}
+                fill={SEV_DOT[getSev(pt.p, pt.c, n)]} opacity={0.28}
+                stroke="white" strokeWidth={1.5}
+              />
+            ))}
+          </g>
+        );
+      })}
 
       {/* X-axis tick labels */}
       {ticks.map(p => (
@@ -696,8 +748,19 @@ function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTag
   const saveEdit = () => {
     if (!eTitle.trim() || !eOwner.trim()) return;
     const newLog = [...log];
-    if (eP !== risk.p) newLog.push({ id: uid('L'), ts: Date.now(), user: who, text: `Sannsynlighet endret fra ${risk.p} (${probLabel(risk.p, scale)}) til ${eP} (${probLabel(eP, scale)})` });
-    if (eC !== risk.c) newLog.push({ id: uid('L'), ts: Date.now(), user: who, text: `Konsekvens endret fra ${risk.c} (${consLabel(risk.c, scale)}) til ${eC} (${consLabel(eC, scale)})` });
+    const pChanged = eP !== risk.p, cChanged = eC !== risk.c;
+    if (pChanged || cChanged) {
+      newLog.push({
+        id: uid('L'), ts: Date.now(), user: who,
+        prevP: risk.p, prevC: risk.c, newP: eP, newC: eC,
+        text: [
+          pChanged && `Sannsynlighet endret fra ${risk.p} (${probLabel(risk.p, scale)}) til ${eP} (${probLabel(eP, scale)})`,
+          cChanged && `Konsekvens endret fra ${risk.c} (${consLabel(risk.c, scale)}) til ${eC} (${consLabel(eC, scale)})`,
+        ].filter(Boolean).join('. '),
+      });
+    }
+    if (eTitle.trim() !== risk.title) newLog.push({ id: uid('L'), ts: Date.now(), user: who, text: `Tittel endret.` });
+    if (eOwner.trim() !== risk.owner) newLog.push({ id: uid('L'), ts: Date.now(), user: who, text: `Eier endret til ${eOwner.trim()}.` });
     onUpdate({ ...risk, title: eTitle.trim(), owner: eOwner.trim(), tags: eTags, p: eP, c: eC, description: eDesc.trim(), log: newLog });
     setEditing(false);
   };
@@ -1313,7 +1376,13 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
   const [openRiskId,   setOpenRiskId]   = useState(null);
   const [showAddRisk,  setShowAddRisk]  = useState(false);
   const [showEditCol,  setShowEditCol]  = useState(false);
+  const [showHistory,  setShowHistory]  = useState(false);
   const scale = collection.scale || 5;
+
+  const trajectories = showHistory
+    ? Object.fromEntries(collection.risks.map(r => [r.id, getRiskTrajectory(r)]).filter(([, t]) => t))
+    : null;
+  const hasHistory = collection.risks.some(r => getRiskTrajectory(r));
 
   const openRisk  = collection.risks.find(r => r.id === openRiskId);
   const sevCounts = collection.risks.reduce((acc, r) => {
@@ -1360,15 +1429,34 @@ function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteR
           <div style={{ display:'grid', gridTemplateColumns:'1fr 200px', gap:20, marginBottom:28, alignItems:'start' }}>
             {/* Risikomatrise */}
             <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, padding:20 }}>
-              <div className="rips-cap" style={{ marginBottom:14 }}>Risikomatrise — sannsynlighet × konsekvens ({scale}×{scale})</div>
-              <RiskMatrix risks={collection.risks} onRiskClick={id => setOpenRiskId(id)} scale={scale} />
-              <div style={{ display:'flex', gap:20, marginTop:14, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+                <div className="rips-cap">Risikomatrise — sannsynlighet × konsekvens ({scale}×{scale})</div>
+                {hasHistory && (
+                  <button
+                    className={`rips-btn-ghost rips-small ${showHistory ? 'active' : ''}`}
+                    style={{ fontSize:11, color: showHistory ? 'var(--currant)' : 'var(--ink-2)', display:'flex', alignItems:'center', gap:5 }}
+                    onClick={() => setShowHistory(h => !h)}
+                    title="Vis bevegelse i matrisen basert på endringslogg"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                    {showHistory ? 'Skjul utvikling' : 'Vis utvikling'}
+                  </button>
+                )}
+              </div>
+              <RiskMatrix risks={collection.risks} onRiskClick={id => setOpenRiskId(id)} scale={scale} trajectories={trajectories} />
+              <div style={{ display:'flex', gap:20, marginTop:14, flexWrap:'wrap', alignItems:'center' }}>
                 {['low','medium','high','critical'].map(s => (
                   <div key={s} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink-2)' }}>
                     <span style={{ width:9, height:9, borderRadius:'50%', background:SEV_DOT[s], display:'inline-block' }}></span>
                     {SEV_LABEL[s]} ({sevCounts[s] || 0})
                   </div>
                 ))}
+                {showHistory && (
+                  <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:'var(--ink-2)', marginLeft:'auto' }}>
+                    <svg width="22" height="10" viewBox="0 0 22 10"><line x1="0" y1="5" x2="16" y2="5" stroke="#5C544A" strokeWidth="1.5" strokeDasharray="4,3"/><path d="M13,1 L13,9 L21,5 z" fill="#5C544A"/><circle cx="0" cy="5" r="4" fill="#5C544A" opacity="0.28"/></svg>
+                    Tidligere posisjon → nåværende
+                  </div>
+                )}
               </div>
             </div>
 
