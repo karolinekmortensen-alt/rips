@@ -8,7 +8,7 @@ import { RiskTable } from '../matrix/RiskTable';
 import { RiskDrawer } from '../drawer/RiskDrawer';
 import { AddRiskModal } from '../modals/AddRiskModal';
 import { EditCollectionModal } from '../modals/EditCollectionModal';
-import { getSev, SEV_DOT, SEV_LABEL, SEV_BG_PRINT, SEV_FG_PRINT, formatDate } from '../constants';
+import { getSev, SEV_DOT, SEV_LABEL, SEV_BG_PRINT, SEV_FG_PRINT, formatDate, probLabel, consLabel } from '../constants';
 import type { Collection, Risk, Profile } from '../types';
 
 interface Props {
@@ -211,6 +211,7 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
 
       {ReactDOM.createPortal(
         <div className="print-report">
+          {/* ── Header ──────────────────────────────────────── */}
           <div className="print-header">
             <div className="print-logo-row">
               <RipsLogo size={28} bg="var(--paper)" />
@@ -226,6 +227,7 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
           <h1 className="print-title">{collection.name}</h1>
           {collection.description && <p className="print-desc">{collection.description}</p>}
 
+          {/* ── Matrix ──────────────────────────────────────── */}
           <div className="print-matrix-section">
             <div className="print-section-label">Risikomatrise — sannsynlighet × konsekvens ({scale}×{scale})</div>
             <div className="print-matrix-wrap">
@@ -241,30 +243,45 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
             </div>
           </div>
 
+          {/* ── Risk register ───────────────────────────────── */}
           <div className="print-section-label" style={{ marginTop:28, marginBottom:10 }}>Risikoregister</div>
           <table className="print-table">
             <thead>
               <tr>
-                <th>ID</th>
+                <th style={{ width:28 }}>#</th>
                 <th>Tittel</th>
                 <th>Eier</th>
-                <th>S</th>
-                <th>K</th>
+                <th>Sannsynlighet</th>
+                <th>Konsekvens</th>
                 <th>Alvor</th>
-                <th>Tiltak</th>
+                <th style={{ width:52 }}>Tiltak</th>
               </tr>
             </thead>
             <tbody>
-              {collection.risks.map(r => {
-                const sev = getSev(r.p, r.c, scale);
+              {collection.risks.map((r, idx) => {
+                const sev  = getSev(r.p, r.c, scale);
                 const done = r.mitigations.filter(m => m.done).length;
                 return (
                   <tr key={r.id}>
-                    <td className="print-mono">{r.id}</td>
-                    <td>{r.title}</td>
-                    <td>{r.owner || '—'}</td>
-                    <td className="print-mono print-center">{r.p}</td>
-                    <td className="print-mono print-center">{r.c}</td>
+                    <td className="print-mono print-center" style={{ fontWeight:600 }}>{idx + 1}</td>
+                    <td>
+                      <div style={{ fontWeight:500 }}>{r.title}</div>
+                      {r.description && <div className="print-subdesc">{r.description}</div>}
+                      {r.tags && r.tags.length > 0 && (
+                        <div style={{ marginTop:3, display:'flex', flexWrap:'wrap', gap:3 }}>
+                          {r.tags.map(t => <span key={t} className="print-tag">{t}</span>)}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ whiteSpace:'nowrap' }}>{r.owner || '—'}</td>
+                    <td>
+                      <span className="print-mono" style={{ fontWeight:600 }}>{r.p}</span>
+                      <span className="print-sublabel"> {probLabel(r.p, scale)}</span>
+                    </td>
+                    <td>
+                      <span className="print-mono" style={{ fontWeight:600 }}>{r.c}</span>
+                      <span className="print-sublabel"> {consLabel(r.c, scale)}</span>
+                    </td>
                     <td><span className="print-sev" style={{ background: SEV_BG_PRINT[sev], color: SEV_FG_PRINT[sev] }}>{SEV_LABEL[sev]}</span></td>
                     <td className="print-mono print-center">{r.mitigations.length > 0 ? `${done}/${r.mitigations.length}` : '—'}</td>
                   </tr>
@@ -273,22 +290,122 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
             </tbody>
           </table>
 
+          {/* ── Mitigations detail ──────────────────────────── */}
           {collection.risks.some(r => r.mitigations.length > 0) && (
             <>
               <div className="print-section-label" style={{ marginTop:28, marginBottom:10 }}>Tiltak</div>
-              {collection.risks.filter(r => r.mitigations.length > 0).map(r => (
+              {collection.risks.filter(r => r.mitigations.length > 0).map((r, idx) => (
                 <div key={r.id} className="print-mit-group">
-                  <div className="print-mit-risk">{r.id} — {r.title}</div>
+                  <div className="print-mit-risk">#{collection.risks.indexOf(r) + 1} — {r.title}</div>
                   {r.mitigations.map(m => (
                     <div key={m.id} className="print-mit-row">
                       <span className={`print-check ${m.done ? 'done' : ''}`}>{m.done ? '✓' : '○'}</span>
                       <span className="print-mit-label">{m.label}</span>
+                      {(m.deltaP || m.deltaC) && !m.done && (
+                        <span className="print-mit-meta print-delta">
+                          {m.deltaP ? `S${m.deltaP > 0 ? '+' : ''}${m.deltaP}` : ''}
+                          {m.deltaP && m.deltaC ? ' ' : ''}
+                          {m.deltaC ? `K${m.deltaC > 0 ? '+' : ''}${m.deltaC}` : ''}
+                        </span>
+                      )}
                       {m.owner && <span className="print-mit-meta">{m.owner}</span>}
                       {m.due   && <span className="print-mit-meta">{formatDate(m.due)}</span>}
                     </div>
                   ))}
                 </div>
               ))}
+            </>
+          )}
+
+          {/* ── Mitigation effect ───────────────────────────── */}
+          {collection.risks.some(r => getMitEffectTrajectory(r, scale)) && (
+            <>
+              <div className="print-section-label" style={{ marginTop:28, marginBottom:10 }}>Tiltakseffekt — projisert posisjon etter gjenstående tiltak</div>
+              <table className="print-table">
+                <thead>
+                  <tr>
+                    <th style={{ width:28 }}>#</th>
+                    <th>Tittel</th>
+                    <th>Nåværende</th>
+                    <th>Projisert</th>
+                    <th>Endring</th>
+                    <th>Alvor nå</th>
+                    <th>Alvor projisert</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {collection.risks.map((r, idx) => {
+                    const traj = getMitEffectTrajectory(r, scale);
+                    if (!traj) return null;
+                    const [from, to] = traj;
+                    const sevNow  = getSev(from.p, from.c, scale);
+                    const sevProj = getSev(to.p, to.c, scale);
+                    const dP = to.p - from.p;
+                    const dC = to.c - from.c;
+                    return (
+                      <tr key={r.id}>
+                        <td className="print-mono print-center" style={{ fontWeight:600 }}>{idx + 1}</td>
+                        <td style={{ fontWeight:500 }}>{r.title}</td>
+                        <td className="print-mono">S{from.p} × K{from.c}</td>
+                        <td className="print-mono">S{to.p} × K{to.c}</td>
+                        <td className="print-mono print-delta-cell">
+                          {dP !== 0 && <span>S{dP > 0 ? '+' : ''}{dP}</span>}
+                          {dC !== 0 && <span>K{dC > 0 ? '+' : ''}{dC}</span>}
+                        </td>
+                        <td><span className="print-sev" style={{ background: SEV_BG_PRINT[sevNow], color: SEV_FG_PRINT[sevNow] }}>{SEV_LABEL[sevNow]}</span></td>
+                        <td><span className="print-sev" style={{ background: SEV_BG_PRINT[sevProj], color: SEV_FG_PRINT[sevProj] }}>{SEV_LABEL[sevProj]}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {/* ── History ─────────────────────────────────────── */}
+          {collection.risks.some(r => getRiskTrajectory(r)) && (
+            <>
+              <div className="print-section-label" style={{ marginTop:28, marginBottom:10 }}>Risikohistorikk — endringer over tid</div>
+              <table className="print-table">
+                <thead>
+                  <tr>
+                    <th style={{ width:28 }}>#</th>
+                    <th>Tittel</th>
+                    <th>Første registrerte</th>
+                    <th>Nåværende</th>
+                    <th>Endring</th>
+                    <th>Alvor da</th>
+                    <th>Alvor nå</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {collection.risks.map((r, idx) => {
+                    const traj = getRiskTrajectory(r);
+                    if (!traj || traj.length < 2) return null;
+                    const first = traj[0];
+                    const last  = traj[traj.length - 1];
+                    const sevFirst = getSev(first.p, first.c, scale);
+                    const sevLast  = getSev(last.p,  last.c,  scale);
+                    const dP = last.p - first.p;
+                    const dC = last.c - first.c;
+                    return (
+                      <tr key={r.id}>
+                        <td className="print-mono print-center" style={{ fontWeight:600 }}>{idx + 1}</td>
+                        <td style={{ fontWeight:500 }}>{r.title}</td>
+                        <td className="print-mono">S{first.p} × K{first.c}</td>
+                        <td className="print-mono">S{last.p} × K{last.c}</td>
+                        <td className="print-mono print-delta-cell">
+                          {dP !== 0 && <span>S{dP > 0 ? '+' : ''}{dP}</span>}
+                          {dC !== 0 && <span>K{dC > 0 ? '+' : ''}{dC}</span>}
+                          {dP === 0 && dC === 0 && <span style={{ color:'#8A8275' }}>—</span>}
+                        </td>
+                        <td><span className="print-sev" style={{ background: SEV_BG_PRINT[sevFirst], color: SEV_FG_PRINT[sevFirst] }}>{SEV_LABEL[sevFirst]}</span></td>
+                        <td><span className="print-sev" style={{ background: SEV_BG_PRINT[sevLast], color: SEV_FG_PRINT[sevLast] }}>{SEV_LABEL[sevLast]}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </>
           )}
 

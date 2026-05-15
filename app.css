@@ -743,6 +743,28 @@ textarea.rips-input { resize: vertical; min-height: 80px; }
   .print-table tr { page-break-inside: avoid; }
   .print-mono { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
   .print-center { text-align: center; }
+  .print-subdesc {
+    font-size: 10.5px;
+    color: #5C544A;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .print-sublabel {
+    font-size: 10px;
+    color: #8A8275;
+  }
+  .print-tag {
+    display: inline-block;
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    background: #F0EBE3;
+    color: #5C544A;
+    border-radius: 3px;
+    padding: 1px 5px;
+    letter-spacing: 0.03em;
+  }
+  .print-delta { color: #2F5236; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+  .print-delta-cell { display: flex; flex-direction: column; gap: 1px; font-size: 10.5px; color: #2F5236; }
   .print-sev {
     display: inline-block;
     padding: 1px 7px;
