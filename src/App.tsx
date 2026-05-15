@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from './supabase';
+import { db, isPasswordRecovery } from './supabase';
 import { AppShell } from './AppShell';
 import { WelcomePage } from './views/WelcomePage';
 import { LoginPage } from './views/LoginPage';
@@ -12,30 +12,22 @@ export function App() {
   const [user,   setUser]   = useState<any>(null);
 
   useEffect(() => {
-    // If the URL contains a recovery token, let onAuthStateChange handle it
-    // (PASSWORD_RECOVERY fires before SIGNED_IN). Skip getSession() to avoid
-    // a race where we navigate to 'app' before the recovery event arrives.
-    const isRecovery = window.location.hash.includes('type=recovery') ||
-                       window.location.search.includes('type=recovery');
-
-    if (!isRecovery) {
-      db.auth.getSession().then(({ data: { session } }: any) => {
-        if (session) { setUser(session.user); setScreen('app'); }
-        else           setScreen('welcome');
-      });
-    }
-
     const { data: { subscription } } = db.auth.onAuthStateChange((event: any, session: any) => {
       if (event === 'PASSWORD_RECOVERY') {
         setUser(session?.user ?? null);
         setScreen('reset-password');
-      } else if (session) {
-        setUser(session.user);
-        setScreen('app');
-      } else {
-        setUser(null);
-        setScreen('welcome');
+      } else if (event === 'INITIAL_SESSION') {
+        // Recovery flow: PASSWORD_RECOVERY will override this immediately after.
+        // Skip navigating to 'app' if we know we're in a recovery flow.
+        if (isPasswordRecovery) return;
+        if (session) { setUser(session.user); setScreen('app'); }
+        else           setScreen('welcome');
+      } else if (event === 'SIGNED_IN') {
+        if (!isPasswordRecovery) { setUser(session?.user); setScreen('app'); }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null); setScreen('welcome');
       }
+      // USER_UPDATED: stay on current screen
     });
     return () => subscription.unsubscribe();
   }, []);

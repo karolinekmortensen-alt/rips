@@ -9,6 +9,10 @@ if (!url || !key) {
   throw new Error('Missing Supabase environment variables');
 }
 
+// Capture BEFORE createClient — the SDK clears the hash during initialisation
+const _h = window.location.hash + window.location.search;
+export const isPasswordRecovery = _h.includes('type=recovery');
+
 export const db = createClient(url, key);
 
 export const getUserName = (u: any): string =>
