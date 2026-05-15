@@ -12,10 +12,19 @@ export function App() {
   const [user,   setUser]   = useState<any>(null);
 
   useEffect(() => {
-    db.auth.getSession().then(({ data: { session } }: any) => {
-      if (session) { setUser(session.user); setScreen('app'); }
-      else           setScreen('welcome');
-    });
+    // If the URL contains a recovery token, let onAuthStateChange handle it
+    // (PASSWORD_RECOVERY fires before SIGNED_IN). Skip getSession() to avoid
+    // a race where we navigate to 'app' before the recovery event arrives.
+    const isRecovery = window.location.hash.includes('type=recovery') ||
+                       window.location.search.includes('type=recovery');
+
+    if (!isRecovery) {
+      db.auth.getSession().then(({ data: { session } }: any) => {
+        if (session) { setUser(session.user); setScreen('app'); }
+        else           setScreen('welcome');
+      });
+    }
+
     const { data: { subscription } } = db.auth.onAuthStateChange((event: any, session: any) => {
       if (event === 'PASSWORD_RECOVERY') {
         setUser(session?.user ?? null);
