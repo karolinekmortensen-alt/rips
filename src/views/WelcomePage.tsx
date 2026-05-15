@@ -27,7 +27,7 @@ export function WelcomePage({ onLogin }: Props) {
             <div><span className="cap">Tiltak</span><span className="welcome-val">Med frist og eier</span></div>
           </div>
         </div>
-        <img className="welcome-cluster" src="assets/rips-cluster-large.svg" alt="" />
+        <img className="welcome-cluster" src="/assets/rips-cluster-large.svg" alt="" />
       </div>
     </div>
   );

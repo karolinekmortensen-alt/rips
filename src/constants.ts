@@ -41,8 +41,8 @@ export const SEV_PILL: Record<Severity, { bg: string; fg: string }> = {
   critical: { bg: '#1A1612', fg: '#F3D9DD' },
 };
 
-let _uid = 200;
-export const uid = (prefix: string) => `${prefix}-${String(++_uid).padStart(4,'0')}`;
+export const uid = (prefix: string) =>
+  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
 export const formatDate = (s: string) => {
   if (!s) return '';
