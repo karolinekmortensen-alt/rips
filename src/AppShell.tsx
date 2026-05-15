@@ -97,7 +97,8 @@ export function AppShell({ user, onLogout }: Props) {
     await applyWorkspace(id);
   };
 
-  const myRole = orgs.find(o => o.id === activeOrgId)?.role ?? 'viewer';
+  const myRole  = orgs.find(o => o.id === activeOrgId)?.role ?? 'viewer';
+  const canEdit = myRole !== 'viewer';
 
   const setView = (v: string) => {
     setViewRaw(v);
@@ -224,6 +225,7 @@ export function AppShell({ user, onLogout }: Props) {
             onSelect={id => { setSelectedId(id); setViewRaw('collection'); }}
             onAdd={() => setShowAddCol(true)}
             onDelete={deleteCollection}
+            canEdit={canEdit}
           />
         )}
         {view === 'collection' && selectedCollection && (
@@ -239,6 +241,7 @@ export function AppShell({ user, onLogout }: Props) {
             onDeleteTag={deleteTag}
             user={user}
             profiles={profiles}
+            canEdit={canEdit}
           />
         )}
         {view === 'team' && (

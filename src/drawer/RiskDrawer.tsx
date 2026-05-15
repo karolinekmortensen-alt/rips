@@ -12,7 +12,7 @@ import type { Risk, Profile } from '../types';
 interface Props {
   risk: Risk;
   onClose: () => void;
-  onUpdate: (r: Risk) => void;
+  onUpdate: ((r: Risk) => void) | undefined;
   onDelete: (id: string) => void;
   scale?: number;
   availableTags?: string[];
@@ -20,9 +20,10 @@ interface Props {
   onDeleteTag?: (t: string) => void;
   user: any;
   profiles?: Profile[];
+  canEdit?: boolean;
 }
 
-export function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {}, user, profiles = [] }: Props) {
+export function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, availableTags = [], onCreateTag = () => {}, onDeleteTag = () => {}, user, profiles = [], canEdit = true }: Props) {
   const [addingMit,      setAddingMit]      = useState(false);
   const [mitLabel,       setMitLabel]       = useState('');
   const [mitDue,         setMitDue]         = useState('');
@@ -141,7 +142,7 @@ export function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, avail
             }
           </div>
           <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-            {!editing && <>
+            {canEdit && !editing && <>
               <button className="rips-btn-ghost rips-small" style={{ color:'var(--ink-2)' }} onClick={startEdit} title="Rediger risiko"><Icon name="edit" size={13} /></button>
               <button className="rips-btn-ghost rips-small" style={{ color:'var(--ink-3)' }} onClick={() => { if (confirm(`Slett risiko "${risk.title}"?`)) onDelete(risk.id); }} title="Slett risiko"><Icon name="trash" size={13} /></button>
             </>}
@@ -241,7 +242,7 @@ export function RiskDrawer({ risk, onClose, onUpdate, onDelete, scale = 5, avail
                 <div className="rips-cap">
                   Tiltak <span style={{ fontFamily:'var(--font-mono)', fontSize:11, color:'var(--ink-3)', fontWeight:400, textTransform:'none', letterSpacing:0 }}>({doneCount}/{risk.mitigations.length})</span>
                 </div>
-                {!addingMit && (
+                {canEdit && !addingMit && (
                   <button className="rips-btn-secondary rips-small" onClick={() => setAddingMit(true)}>
                     <Icon name="plus" size={12} /> Nytt tiltak
                   </button>

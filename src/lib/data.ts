@@ -107,13 +107,13 @@ export interface OrgInfo {
 export async function loadMyOrgs(userId: string): Promise<OrgInfo[]> {
   const { data } = await db
     .from('memberships')
-    .select('org_id, role, invited_by, organizations(name)')
+    .select('org_id, role, organizations(name, is_personal)')
     .eq('user_id', userId);
   return (data || []).map((m: any) => ({
     id: m.org_id,
     name: m.organizations?.name || 'Workspace',
     role: m.role,
-    isPersonal: m.role === 'owner' && !m.invited_by,
+    isPersonal: !!m.organizations?.is_personal,
   }));
 }
 

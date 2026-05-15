@@ -23,9 +23,10 @@ interface Props {
   onDeleteTag: (t: string) => void;
   user: any;
   profiles?: Profile[];
+  canEdit: boolean;
 }
 
-export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateCollection, availableTags, onCreateTag, onDeleteTag, user, profiles = [] }: Props) {
+export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, onDeleteRisk, onUpdateCollection, availableTags, onCreateTag, onDeleteTag, user, profiles = [], canEdit }: Props) {
   const [openRiskId,    setOpenRiskId]   = useState<string | null>(null);
   const [showAddRisk,   setShowAddRisk]  = useState(false);
   const [showEditCol,   setShowEditCol]  = useState(false);
@@ -77,12 +78,14 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
             <button className="rips-btn-secondary" onClick={() => window.print()} title="Skriv ut / Lagre som PDF">
               <Icon name="printer" size={14} /> Skriv ut
             </button>
-            <button className="rips-btn-secondary" onClick={() => setShowEditCol(true)}>
-              <Icon name="edit" size={14} /> Rediger
-            </button>
-            <button className="rips-btn" onClick={() => setShowAddRisk(true)}>
-              <Icon name="plus" size={14} /> Ny risiko
-            </button>
+            {canEdit && <>
+              <button className="rips-btn-secondary" onClick={() => setShowEditCol(true)}>
+                <Icon name="edit" size={14} /> Rediger
+              </button>
+              <button className="rips-btn" onClick={() => setShowAddRisk(true)}>
+                <Icon name="plus" size={14} /> Ny risiko
+              </button>
+            </>}
           </div>
         </header>
 
@@ -157,8 +160,11 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
         {collection.risks.length === 0 ? (
           <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:6, padding:'56px 24px', textAlign:'center' }}>
             <div style={{ fontFamily:'var(--font-display)', fontSize:24, color:'var(--ink-2)', marginBottom:12, fontStyle:'italic' }}>Ingen risikoer ennå</div>
-            <p style={{ fontSize:14, color:'var(--ink-2)', marginBottom:20 }}>Legg til den første risikoen for å begynne.</p>
-            <button className="rips-btn" onClick={() => setShowAddRisk(true)}><Icon name="plus" size={14} /> Legg til risiko</button>
+            {canEdit
+              ? <><p style={{ fontSize:14, color:'var(--ink-2)', marginBottom:20 }}>Legg til den første risikoen for å begynne.</p>
+                  <button className="rips-btn" onClick={() => setShowAddRisk(true)}><Icon name="plus" size={14} /> Legg til risiko</button></>
+              : <p style={{ fontSize:14, color:'var(--ink-2)' }}>Ingen risikoer er lagt til i denne samlingen ennå.</p>
+            }
           </div>
         ) : (
           <>
@@ -184,7 +190,7 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
         <RiskDrawer
           risk={openRisk}
           onClose={() => setOpenRiskId(null)}
-          onUpdate={updated => onUpdateRisk(updated)}
+          onUpdate={updated => canEdit ? onUpdateRisk(updated) : undefined}
           onDelete={id => { onDeleteRisk(id); setOpenRiskId(null); }}
           scale={scale}
           availableTags={availableTags}
@@ -192,10 +198,11 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
           onDeleteTag={onDeleteTag}
           user={user}
           profiles={profiles}
+          canEdit={canEdit}
         />
       )}
 
-      {showAddRisk && (
+      {canEdit && showAddRisk && (
         <AddRiskModal
           onClose={() => setShowAddRisk(false)}
           onAdd={risk => { onAddRisk(risk); setShowAddRisk(false); }}
@@ -207,7 +214,7 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
         />
       )}
 
-      {showEditCol && (
+      {canEdit && showEditCol && (
         <EditCollectionModal
           collection={collection}
           onClose={() => setShowEditCol(false)}
