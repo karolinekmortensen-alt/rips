@@ -101,21 +101,23 @@ export interface OrgInfo {
   id: string;
   name: string;
   role: string;
+  isPersonal: boolean;
 }
 
 export async function loadMyOrgs(userId: string): Promise<OrgInfo[]> {
   const { data } = await db
     .from('memberships')
-    .select('org_id, role, organizations(name)')
+    .select('org_id, role, invited_by, organizations(name)')
     .eq('user_id', userId);
   return (data || []).map((m: any) => ({
     id: m.org_id,
     name: m.organizations?.name || 'Workspace',
     role: m.role,
+    isPersonal: m.role === 'owner' && !m.invited_by,
   }));
 }
 
-export async function createPersonalOrg(userId: string, displayName: string): Promise<string> {
+export async function createPersonalOrg(displayName: string): Promise<string> {
   const slug =
     displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 36) +
     '-' + Math.random().toString(36).slice(2, 6);
@@ -125,12 +127,6 @@ export async function createPersonalOrg(userId: string, displayName: string): Pr
   });
   if (error) throw new Error('Kunne ikke opprette org: ' + error.message);
   return data as string;
-}
-
-export async function ensureOrg(userId: string, displayName: string): Promise<string> {
-  const orgs = await loadMyOrgs(userId);
-  if (orgs.length > 0) return orgs[0].id;
-  return createPersonalOrg(userId, displayName);
 }
 
 // ─── helpers ────────────────────────────────────────────────────

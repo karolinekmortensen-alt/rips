@@ -46,6 +46,7 @@ export function Sidebar({ view, setView, collections, displayName, orgs, activeO
           onClick={() => setOrgOpen(o => !o)}
           title={orgs.length > 1 ? 'Bytt workspace' : activeOrg?.name}
         >
+          <Icon name={activeOrg?.isPersonal ? 'user' : 'users'} size={13} color="var(--ink-3)" />
           <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'left' }}>
             {activeOrg?.name ?? '…'}
           </span>
@@ -65,11 +66,14 @@ export function Sidebar({ view, setView, collections, displayName, orgs, activeO
                 className={`rips-org-option ${o.id === activeOrgId ? 'active' : ''}`}
                 onClick={() => onSwitchOrg(o.id)}
               >
+                <Icon name={o.isPersonal ? 'user' : 'users'} size={13} color="var(--ink-3)" />
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontWeight: o.id === activeOrgId ? 500 : 400, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                     {o.name}
                   </div>
-                  <div style={{ fontSize:10, color:'var(--ink-3)', marginTop:1 }}>{ROLE_LABEL[o.role] ?? o.role}</div>
+                  <div style={{ fontSize:10, color:'var(--ink-3)', marginTop:1 }}>
+                    {o.isPersonal ? 'Personlig' : ROLE_LABEL[o.role] ?? o.role}
+                  </div>
                 </div>
                 {o.id === activeOrgId && <Icon name="check" size={13} color="var(--leaf)" />}
               </div>

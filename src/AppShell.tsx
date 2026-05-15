@@ -56,14 +56,25 @@ export function AppShell({ user, onLogout }: Props) {
       const name = getUserName(user);
 
       let myOrgs = await loadMyOrgs(user.id);
-      if (myOrgs.length === 0) {
-        const id = await createPersonalOrg(user.id, name);
-        myOrgs = [{ id, name: name + 's workspace', role: 'owner' }];
+
+      // Always ensure a personal org exists — separate from any team memberships
+      const hasPersonal = myOrgs.some(o => o.isPersonal);
+      if (!hasPersonal) {
+        await createPersonalOrg(name);
+        myOrgs = await loadMyOrgs(user.id);
       }
+
+      // Personal org first, then teams alphabetically
+      myOrgs.sort((a, b) => {
+        if (a.isPersonal !== b.isPersonal) return a.isPersonal ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
       setOrgs(myOrgs);
 
       const savedId = localStorage.getItem(`rips-active-org-${user.id}`);
-      const active  = myOrgs.find(o => o.id === savedId) ?? myOrgs[0];
+      const active  = myOrgs.find(o => o.id === savedId)
+                   ?? myOrgs.find(o => o.isPersonal)
+                   ?? myOrgs[0];
       setActiveOrgId(active.id);
       await applyWorkspace(active.id);
       setLoading(false);
