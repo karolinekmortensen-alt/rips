@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { db } from './supabase';
+import { useState, useEffect, useRef } from 'react';
+import { db, getUserName } from './supabase';
 import { Sidebar } from './layout/Sidebar';
 import { TopBar } from './layout/TopBar';
 import { DashboardView } from './views/DashboardView';
@@ -7,8 +7,15 @@ import { CollectionsView } from './views/CollectionsView';
 import { CollectionView } from './views/CollectionView';
 import { ProfileView } from './views/ProfileView';
 import { AddCollectionModal } from './modals/AddCollectionModal';
-import { INITIAL_TAGS, INITIAL_COLLECTIONS } from './constants';
-import type { Collection, Profile } from './types';
+import { RipsLogo } from './components/RipsLogo';
+import { INITIAL_TAGS } from './constants';
+import {
+  ensureOrg, loadWorkspace,
+  dbInsertCollection, dbUpdateCollection, dbDeleteCollection,
+  dbInsertRisk, dbDeleteRisk, dbSyncRisk,
+  dbEnsureTag, dbDeleteTag,
+} from './lib/data';
+import type { Collection, Risk, Profile } from './types';
 
 interface Props {
   user: any;
@@ -17,37 +24,31 @@ interface Props {
 
 export function AppShell({ user, onLogout }: Props) {
   const [view,          setViewRaw]      = useState('dashboard');
-  const [collections,   setCollections]  = useState<Collection[]>(INITIAL_COLLECTIONS);
+  const [collections,   setCollections]  = useState<Collection[]>([]);
   const [selectedId,    setSelectedId]   = useState<string | null>(null);
   const [showAddCol,    setShowAddCol]   = useState(false);
   const [availableTags, setAvailableTags]= useState<string[]>(INITIAL_TAGS);
-  const [dbReady,       setDbReady]      = useState(false);
+  const [loading,       setLoading]      = useState(true);
   const [profiles,      setProfiles]     = useState<Profile[]>([]);
 
+  const orgId   = useRef('');
+  const tagRows = useRef<{ id: string; name: string }[]>([]);
+  const idMap   = useRef(new Map<string, string>());
+
   useEffect(() => {
-    db.from('workspaces').select('*').eq('id', user.id).single().then(({ data, error }: any) => {
-      if (error && error.code !== 'PGRST116') console.error('Rips load error:', error);
-      if (data) {
-        if (Array.isArray(data.collections)) setCollections(data.collections);
-        if (Array.isArray(data.tags) && data.tags.length) setAvailableTags(data.tags);
-      }
-      setDbReady(true);
-    });
+    const init = async () => {
+      const displayName = getUserName(user);
+      orgId.current = await ensureOrg(user.id, displayName);
+      const ws = await loadWorkspace(orgId.current);
+      tagRows.current = ws.tagRows;
+      setCollections(ws.collections);
+      setAvailableTags(ws.tagRows.length ? ws.tagRows.map(t => t.name) : INITIAL_TAGS);
+      setLoading(false);
+    };
+    init().catch(err => { console.error('Init error:', err); setLoading(false); });
+
     db.from('profiles').select('*').then(({ data }: any) => { if (data) setProfiles(data); });
   }, []);
-
-  useEffect(() => {
-    if (!dbReady) return;
-    const t = setTimeout(() => {
-      db.from('workspaces')
-        .upsert({ id: user.id, collections, tags: availableTags, updated_at: new Date().toISOString() })
-        .then(({ error }: any) => { if (error) console.error('Rips save error:', error); });
-    }, 800);
-    return () => clearTimeout(t);
-  }, [collections, availableTags, dbReady]);
-
-  const createTag = (name: string) => setAvailableTags(prev => prev.includes(name) ? prev : [...prev, name]);
-  const deleteTag = (name: string) => setAvailableTags(prev => prev.filter(t => t !== name));
 
   const setView = (v: string) => {
     setViewRaw(v);
@@ -62,15 +63,86 @@ export function AppShell({ user, onLogout }: Props) {
     view === 'profile'     ? ['Konto', 'Brukerprofil'] :
     ['Workspace', 'Samlinger', selectedCollection?.name || '…'];
 
-  const addCollection    = (col: Collection) => setCollections(prev => [...prev, col]);
-  const deleteCollection = (id: string) => {
+  // ── Collections ─────────────────────────────────────────────
+
+  const addCollection = async (input: Omit<Collection, 'id' | 'risks'>) => {
+    const id = await dbInsertCollection(orgId.current, input).catch(console.error);
+    if (!id) return;
+    setCollections(prev => [...prev, { ...input, id, risks: [] }]);
+  };
+
+  const updateCollection = (updated: Collection) => {
+    setCollections(prev => prev.map(c => c.id === updated.id ? updated : c));
+    dbUpdateCollection(updated.id, updated).catch(console.error);
+  };
+
+  const deleteCollection = async (id: string) => {
+    await dbDeleteCollection(id).catch(console.error);
     setCollections(prev => prev.filter(c => c.id !== id));
     if (selectedId === id) setView('collections');
   };
-  const addRisk    = (risk: any) => setCollections(prev => prev.map(c => c.id === selectedId ? { ...c, risks: [...c.risks, risk] } : c));
-  const updateRisk = (updated: any) => setCollections(prev => prev.map(c => c.id === selectedId ? { ...c, risks: c.risks.map(r => r.id === updated.id ? updated : r) } : c));
-  const deleteRisk = (riskId: string) => setCollections(prev => prev.map(c => c.id === selectedId ? { ...c, risks: c.risks.filter(r => r.id !== riskId) } : c));
-  const updateCollection = (updated: Collection) => setCollections(prev => prev.map(col => col.id === updated.id ? updated : col));
+
+  // ── Risks ────────────────────────────────────────────────────
+
+  const addRisk = async (risk: Risk) => {
+    const id = await dbInsertRisk(
+      selectedId!, orgId.current,
+      { title: risk.title, description: risk.description, owner: risk.owner, tags: risk.tags || [], p: risk.p, c: risk.c },
+      tagRows.current,
+    ).catch(console.error);
+    if (!id) return;
+    setCollections(prev => prev.map(c =>
+      c.id === selectedId
+        ? { ...c, risks: [...c.risks, { ...risk, id, mitigations: [], comments: [], log: [] }] }
+        : c
+    ));
+  };
+
+  const updateRisk = (updated: Risk) => {
+    const col = collections.find(c => c.id === selectedId);
+    const oldRisk = col?.risks.find(r => r.id === updated.id);
+    if (!oldRisk) return;
+    setCollections(prev => prev.map(c =>
+      c.id === selectedId
+        ? { ...c, risks: c.risks.map(r => r.id === updated.id ? updated : r) }
+        : c
+    ));
+    dbSyncRisk(oldRisk, updated, orgId.current, user.id, getUserName(user), tagRows.current, idMap.current)
+      .catch(console.error);
+  };
+
+  const deleteRisk = async (riskId: string) => {
+    await dbDeleteRisk(riskId).catch(console.error);
+    setCollections(prev => prev.map(c =>
+      c.id === selectedId
+        ? { ...c, risks: c.risks.filter(r => r.id !== riskId) }
+        : c
+    ));
+  };
+
+  // ── Tags ─────────────────────────────────────────────────────
+
+  const createTag = async (name: string) => {
+    const id = await dbEnsureTag(orgId.current, name, tagRows.current).catch(console.error);
+    if (!id) return;
+    tagRows.current = [...tagRows.current, { id, name }];
+    setAvailableTags(prev => prev.includes(name) ? prev : [...prev, name]);
+  };
+
+  const deleteTag = async (name: string) => {
+    await dbDeleteTag(orgId.current, name).catch(console.error);
+    tagRows.current = tagRows.current.filter(t => t.name !== name);
+    setAvailableTags(prev => prev.filter(t => t !== name));
+  };
+
+  // ── Render ───────────────────────────────────────────────────
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'var(--paper)', flexDirection:'column', gap:16 }}>
+      <RipsLogo size={42} bg="var(--paper)" />
+      <div style={{ fontSize:13, color:'var(--ink-3)' }}>Laster workspace…</div>
+    </div>
+  );
 
   return (
     <div className="app-shell">

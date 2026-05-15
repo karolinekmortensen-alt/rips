@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { Icon } from '../components/Icon';
 import { OwnerSelect } from '../components/OwnerSelect';
-import { uid } from '../constants';
 import type { Collection, Profile } from '../types';
 
 interface Props {
   onClose: () => void;
-  onAdd: (col: Collection) => void;
+  onAdd: (col: Omit<Collection, 'id' | 'risks'>) => void;
   profiles?: Profile[];
 }
 
@@ -20,7 +19,7 @@ export function AddCollectionModal({ onClose, onAdd, profiles = [] }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !owner.trim()) return;
-    onAdd({ id: uid('C'), name: name.trim(), description: desc.trim(), owner: owner.trim(), period: period.trim(), scale: Number(scale), risks: [] });
+    onAdd({ name: name.trim(), description: desc.trim(), owner: owner.trim(), period: period.trim(), scale: Number(scale) });
     onClose();
   };
 

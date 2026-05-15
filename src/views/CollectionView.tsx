@@ -14,7 +14,7 @@ import type { Collection, Risk, Profile } from '../types';
 interface Props {
   collection: Collection;
   onBack: () => void;
-  onAddRisk: (r: Risk) => void;
+  onAddRisk: (r: Omit<Risk, 'id' | 'comments' | 'log'>) => void;
   onUpdateRisk: (r: Risk) => void;
   onDeleteRisk: (id: string) => void;
   onUpdateCollection: (c: Collection) => void;

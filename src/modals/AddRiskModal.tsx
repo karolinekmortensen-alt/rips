@@ -3,12 +3,12 @@ import { Icon } from '../components/Icon';
 import { SevPill } from '../components/SevPill';
 import { TagInput } from '../components/TagInput';
 import { OwnerSelect } from '../components/OwnerSelect';
-import { getSev, probLabel, consLabel, uid } from '../constants';
+import { getSev, probLabel, consLabel } from '../constants';
 import type { Risk, Profile } from '../types';
 
 interface Props {
   onClose: () => void;
-  onAdd: (risk: Risk) => void;
+  onAdd: (risk: Omit<Risk, 'id' | 'comments' | 'log'>) => void;
   scale?: number;
   availableTags?: string[];
   onCreateTag?: (t: string) => void;
@@ -30,7 +30,7 @@ export function AddRiskModal({ onClose, onAdd, scale = 5, availableTags = [], on
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !owner.trim()) return;
-    onAdd({ id: uid('R'), title: title.trim(), owner: owner.trim(), tags, p: Number(p), c: Number(c), description: desc.trim(), mitigations: [], comments: [], log: [] });
+    onAdd({ title: title.trim(), owner: owner.trim(), tags, p: Number(p), c: Number(c), description: desc.trim(), mitigations: [] });
     onClose();
   };
 
