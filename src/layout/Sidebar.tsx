@@ -29,7 +29,7 @@ export function Sidebar({ view, setView, collections, displayName, orgs, activeO
   const navItems = [
     { id:'dashboard',   label:'Oversikt',   icon:'grid'   },
     { id:'collections', label:'Samlinger',  icon:'folder', count: collections.length },
-    { id:'team',        label:'Team',       icon:'users'  },
+    ...(!activeOrg?.isPersonal ? [{ id:'team', label:'Team', icon:'users' }] : []),
   ];
 
   return (

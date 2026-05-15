@@ -90,8 +90,9 @@ export function AppShell({ user, onLogout }: Props) {
 
   const switchOrg = async (id: string) => {
     if (id === orgId.current) return;
+    const target = orgs.find(o => o.id === id);
     setActiveOrgId(id);
-    setView('dashboard');
+    setView(target?.isPersonal && view === 'team' ? 'dashboard' : 'dashboard');
     setCollections([]);
     localStorage.setItem(`rips-active-org-${user.id}`, id);
     await applyWorkspace(id);
