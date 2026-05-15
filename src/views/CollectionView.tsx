@@ -42,6 +42,13 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
   const hasHistory    = collection.risks.some(r => getRiskTrajectory(r));
   const hasMitEffects = collection.risks.some(r => getMitEffectTrajectory(r, scale));
 
+  const printTrajectories    = hasHistory
+    ? Object.fromEntries(collection.risks.map(r => [r.id, getRiskTrajectory(r)]).filter(([, t]) => t) as [string, any][])
+    : null;
+  const printMitTrajectories = hasMitEffects
+    ? Object.fromEntries(collection.risks.map(r => [r.id, getMitEffectTrajectory(r, scale)]).filter(([, t]) => t) as [string, any][])
+    : null;
+
   const openRisk  = collection.risks.find(r => r.id === openRiskId);
   const sevCounts = collection.risks.reduce((acc, r) => {
     const s = getSev(r.p, r.c, scale);
@@ -231,7 +238,13 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
           <div className="print-matrix-section">
             <div className="print-section-label">Risikomatrise — sannsynlighet × konsekvens ({scale}×{scale})</div>
             <div className="print-matrix-wrap">
-              <RiskMatrix risks={collection.risks} onRiskClick={() => {}} scale={scale} />
+              <RiskMatrix
+                risks={collection.risks}
+                onRiskClick={() => {}}
+                scale={scale}
+                trajectories={printTrajectories}
+                mitTrajectories={printMitTrajectories}
+              />
             </div>
             <div className="print-legend">
               {(['low','medium','high','critical'] as const).map(s => (
@@ -240,6 +253,18 @@ export function CollectionView({ collection, onBack, onAddRisk, onUpdateRisk, on
                   {SEV_LABEL[s]} ({sevCounts[s] || 0})
                 </div>
               ))}
+              {printTrajectories && (
+                <div className="print-legend-item">
+                  <svg width="22" height="10" viewBox="0 0 22 10"><line x1="0" y1="5" x2="16" y2="5" stroke="#5C544A" strokeWidth="1.5" strokeDasharray="4,3"/><path d="M13,1 L13,9 L21,5 z" fill="#5C544A"/><circle cx="0" cy="5" r="4" fill="#5C544A" opacity="0.28"/></svg>
+                  Tidligere → nåværende
+                </div>
+              )}
+              {printMitTrajectories && (
+                <div className="print-legend-item">
+                  <svg width="22" height="10" viewBox="0 0 22 10"><line x1="0" y1="5" x2="14" y2="5" stroke="#2F5236" strokeWidth="1.5" strokeDasharray="3,3"/><path d="M12,1 L12,9 L21,5 z" fill="#2F5236"/><circle cx="21" cy="5" r="4" fill="#2F5236" opacity="0.35" stroke="#2F5236" strokeWidth="1.5"/></svg>
+                  Nåværende → etter tiltak
+                </div>
+              )}
             </div>
           </div>
 
