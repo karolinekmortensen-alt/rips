@@ -5,7 +5,7 @@ import { WelcomePage } from './views/WelcomePage';
 import { LoginPage } from './views/LoginPage';
 import { RipsLogo } from './components/RipsLogo';
 
-type Screen = 'loading' | 'welcome' | 'login' | 'app';
+type Screen = 'loading' | 'welcome' | 'login' | 'app' | 'reset-password';
 
 export function App() {
   const [screen, setScreen] = useState<Screen>('loading');
@@ -16,9 +16,17 @@ export function App() {
       if (session) { setUser(session.user); setScreen('app'); }
       else           setScreen('welcome');
     });
-    const { data: { subscription } } = db.auth.onAuthStateChange((_event: any, session: any) => {
-      if (session) { setUser(session.user); setScreen('app'); }
-      else          { setUser(null); setScreen('welcome'); }
+    const { data: { subscription } } = db.auth.onAuthStateChange((event: any, session: any) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setUser(session?.user ?? null);
+        setScreen('reset-password');
+      } else if (session) {
+        setUser(session.user);
+        setScreen('app');
+      } else {
+        setUser(null);
+        setScreen('welcome');
+      }
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -31,7 +39,8 @@ export function App() {
       <div style={{ fontSize:13, color:'var(--ink-3)' }}>Laster…</div>
     </div>
   );
-  if (screen === 'welcome') return <WelcomePage onLogin={() => setScreen('login')} />;
-  if (screen === 'login')   return <LoginPage onBack={() => setScreen('welcome')} />;
+  if (screen === 'welcome')        return <WelcomePage onLogin={() => setScreen('login')} />;
+  if (screen === 'login')          return <LoginPage onBack={() => setScreen('welcome')} />;
+  if (screen === 'reset-password') return <LoginPage onBack={() => setScreen('welcome')} initialMode="new-password" />;
   return <AppShell user={user} onLogout={handleLogout} />;
 }

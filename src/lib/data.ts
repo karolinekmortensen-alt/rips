@@ -97,25 +97,40 @@ export async function dbUpdateProfile(userId: string, fullName: string): Promise
 
 // ─── org setup ──────────────────────────────────────────────────
 
-export async function ensureOrg(userId: string, displayName: string): Promise<string> {
-  const { data: mem } = await db
+export interface OrgInfo {
+  id: string;
+  name: string;
+  role: string;
+}
+
+export async function loadMyOrgs(userId: string): Promise<OrgInfo[]> {
+  const { data } = await db
     .from('memberships')
-    .select('org_id')
-    .eq('user_id', userId)
-    .maybeSingle();
+    .select('org_id, role, organizations(name)')
+    .eq('user_id', userId);
+  return (data || []).map((m: any) => ({
+    id: m.org_id,
+    name: m.organizations?.name || 'Workspace',
+    role: m.role,
+  }));
+}
 
-  if (mem) return mem.org_id;
-
+export async function createPersonalOrg(userId: string, displayName: string): Promise<string> {
   const slug =
     displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 36) +
     '-' + Math.random().toString(36).slice(2, 6);
-
   const { data, error } = await db.rpc('create_my_org', {
     org_name: displayName + 's workspace',
     org_slug: slug,
   });
   if (error) throw new Error('Kunne ikke opprette org: ' + error.message);
   return data as string;
+}
+
+export async function ensureOrg(userId: string, displayName: string): Promise<string> {
+  const orgs = await loadMyOrgs(userId);
+  if (orgs.length > 0) return orgs[0].id;
+  return createPersonalOrg(userId, displayName);
 }
 
 // ─── helpers ────────────────────────────────────────────────────

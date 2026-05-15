@@ -201,6 +201,47 @@ textarea.rips-input { resize: vertical; min-height: 80px; }
 .rips-item.sel::before { content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; background: var(--currant); border-radius: 0 1px 1px 0; }
 .rips-item.sel svg { color: var(--currant); }
 
+/* Org switcher */
+.rips-org-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: background var(--dur-hover) var(--ease);
+}
+.rips-org-btn:hover { background: var(--paper-3); }
+.rips-org-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 10px;
+  right: 10px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.10);
+  z-index: 50;
+  overflow: hidden;
+}
+.rips-org-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background var(--dur-hover) var(--ease);
+}
+.rips-org-option:hover { background: var(--paper-2); }
+.rips-org-option.active { background: var(--currant-skin); }
+
 /* ═══════════════════════════════════════════════════
    TOPBAR
 ═══════════════════════════════════════════════════ */
