@@ -11,7 +11,7 @@ import { AddCollectionModal } from './modals/AddCollectionModal';
 import { RipsLogo } from './components/RipsLogo';
 import { INITIAL_TAGS } from './constants';
 import {
-  loadMyOrgs, createPersonalOrg, loadWorkspace,
+  loadMyOrgs, createPersonalOrg, loadWorkspace, loadOrgProfiles,
   dbInsertCollection, dbUpdateCollection, dbDeleteCollection,
   dbInsertRisk, dbDeleteRisk, dbSyncRisk,
   dbEnsureTag, dbDeleteTag,
@@ -43,10 +43,11 @@ export function AppShell({ user, onLogout }: Props) {
 
   const applyWorkspace = async (id: string) => {
     orgId.current = id;
-    const ws = await loadWorkspace(id);
+    const [ws, orgProfiles] = await Promise.all([loadWorkspace(id), loadOrgProfiles(id)]);
     tagRows.current = ws.tagRows;
     setCollections(ws.collections);
     setAvailableTags(ws.tagRows.length ? ws.tagRows.map(t => t.name) : INITIAL_TAGS);
+    setProfiles(orgProfiles);
     idMap.current = new Map();
   };
 
@@ -80,13 +81,7 @@ export function AppShell({ user, onLogout }: Props) {
       setLoading(false);
     };
     init().catch(err => { console.error('Init error:', err); setLoading(false); });
-
-    loadProfiles();
   }, []);
-
-  const loadProfiles = () => {
-    db.from('profiles').select('*').then(({ data }: any) => { if (data) setProfiles(data); });
-  };
 
   const switchOrg = async (id: string) => {
     if (id === orgId.current) return;

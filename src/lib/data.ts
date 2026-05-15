@@ -86,6 +86,14 @@ export async function dbAcceptInvitations(): Promise<void> {
   await db.rpc('accept_pending_invitations');
 }
 
+export async function loadOrgProfiles(orgId: string): Promise<{ id: string; full_name: string; email: string }[]> {
+  const { data } = await db
+    .from('memberships')
+    .select('profiles(id, full_name, email)')
+    .eq('org_id', orgId);
+  return (data || []).map((m: any) => m.profiles).filter(Boolean);
+}
+
 // ─── profile ────────────────────────────────────────────────────
 
 export async function dbUpdateProfile(userId: string, fullName: string): Promise<void> {
