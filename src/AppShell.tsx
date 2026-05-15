@@ -6,6 +6,7 @@ import { DashboardView } from './views/DashboardView';
 import { CollectionsView } from './views/CollectionsView';
 import { CollectionView } from './views/CollectionView';
 import { ProfileView } from './views/ProfileView';
+import { TeamView } from './views/TeamView';
 import { AddCollectionModal } from './modals/AddCollectionModal';
 import { RipsLogo } from './components/RipsLogo';
 import { INITIAL_TAGS } from './constants';
@@ -14,6 +15,7 @@ import {
   dbInsertCollection, dbUpdateCollection, dbDeleteCollection,
   dbInsertRisk, dbDeleteRisk, dbSyncRisk,
   dbEnsureTag, dbDeleteTag,
+  dbAcceptInvitations,
 } from './lib/data';
 import type { Collection, Risk, Profile } from './types';
 
@@ -30,6 +32,8 @@ export function AppShell({ user, onLogout }: Props) {
   const [availableTags, setAvailableTags]= useState<string[]>(INITIAL_TAGS);
   const [loading,       setLoading]      = useState(true);
   const [profiles,      setProfiles]     = useState<Profile[]>([]);
+  const [myRole,        setMyRole]       = useState('editor');
+  const [displayName,   setDisplayName]  = useState(getUserName(user));
 
   const orgId   = useRef('');
   const tagRows = useRef<{ id: string; name: string }[]>([]);
@@ -37,12 +41,22 @@ export function AppShell({ user, onLogout }: Props) {
 
   useEffect(() => {
     const init = async () => {
-      const displayName = getUserName(user);
-      orgId.current = await ensureOrg(user.id, displayName);
+      await dbAcceptInvitations().catch(() => {});
+      const name = getUserName(user);
+      orgId.current = await ensureOrg(user.id, name);
       const ws = await loadWorkspace(orgId.current);
       tagRows.current = ws.tagRows;
       setCollections(ws.collections);
       setAvailableTags(ws.tagRows.length ? ws.tagRows.map(t => t.name) : INITIAL_TAGS);
+
+      const { data: mem } = await db
+        .from('memberships')
+        .select('role')
+        .eq('org_id', orgId.current)
+        .eq('user_id', user.id)
+        .single();
+      if (mem) setMyRole(mem.role);
+
       setLoading(false);
     };
     init().catch(err => { console.error('Init error:', err); setLoading(false); });
@@ -60,6 +74,7 @@ export function AppShell({ user, onLogout }: Props) {
   const crumbs =
     view === 'dashboard'   ? ['Workspace', 'Oversikt'] :
     view === 'collections' ? ['Workspace', 'Samlinger'] :
+    view === 'team'        ? ['Workspace', 'Team'] :
     view === 'profile'     ? ['Konto', 'Brukerprofil'] :
     ['Workspace', 'Samlinger', selectedCollection?.name || '…'];
 
@@ -146,7 +161,7 @@ export function AppShell({ user, onLogout }: Props) {
 
   return (
     <div className="app-shell">
-      <Sidebar view={view} setView={setView} collections={collections} user={user} onLogout={onLogout} />
+      <Sidebar view={view} setView={setView} collections={collections} user={user} displayName={displayName} onLogout={onLogout} />
       <main className="app-main">
         <TopBar crumbs={crumbs} user={user} />
 
@@ -181,8 +196,15 @@ export function AppShell({ user, onLogout }: Props) {
             profiles={profiles}
           />
         )}
+        {view === 'team' && (
+          <TeamView orgId={orgId.current} myUserId={user.id} myRole={myRole} />
+        )}
         {view === 'profile' && (
-          <ProfileView user={user} collections={collections} />
+          <ProfileView
+            user={user}
+            collections={collections}
+            onUserUpdated={newName => setDisplayName(newName)}
+          />
         )}
       </main>
 

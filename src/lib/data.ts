@@ -1,6 +1,100 @@
 import { db } from '../supabase';
 import type { Collection, Risk, Mitigation, Comment, LogEntry } from '../types';
 
+// ─── team / members ──────────────────────────────────────────────
+
+export interface Member {
+  membershipId: string;
+  userId: string;
+  role: string;
+  name: string;
+  email: string;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: string;
+}
+
+export async function loadMembers(orgId: string): Promise<Member[]> {
+  const { data: mems } = await db
+    .from('memberships').select('id, user_id, role').eq('org_id', orgId);
+  if (!mems || mems.length === 0) return [];
+
+  const userIds = mems.map((m: any) => m.user_id);
+  const { data: profs } = await db
+    .from('profiles').select('id, full_name, email').in('id', userIds);
+  const profMap = Object.fromEntries((profs || []).map((p: any) => [p.id, p]));
+
+  return mems.map((m: any) => ({
+    membershipId: m.id,
+    userId: m.user_id,
+    role: m.role,
+    name: profMap[m.user_id]?.full_name || profMap[m.user_id]?.email || 'Ukjent',
+    email: profMap[m.user_id]?.email || '',
+  }));
+}
+
+export async function loadInvitations(orgId: string): Promise<Invitation[]> {
+  const { data } = await db
+    .from('invitations').select('id, email, role').eq('org_id', orgId).order('created_at');
+  return (data || []).map((r: any) => ({ id: r.id, email: r.email, role: r.role }));
+}
+
+export async function dbInviteMember(
+  orgId: string, email: string, role: string, invitedBy: string,
+): Promise<'added' | 'invited' | 'already_member'> {
+  // Check if already member
+  const { data: existingMem } = await db
+    .from('memberships').select('id')
+    .eq('org_id', orgId)
+    .eq('user_id', (await db.from('profiles').select('id').eq('email', email).maybeSingle()).data?.id || '')
+    .maybeSingle();
+  if (existingMem) return 'already_member';
+
+  // Check if profile exists with this email
+  const { data: profile } = await db
+    .from('profiles').select('id').eq('email', email).maybeSingle();
+
+  if (profile) {
+    await db.from('memberships').insert({ org_id: orgId, user_id: profile.id, role, invited_by: invitedBy });
+    return 'added';
+  }
+
+  // Not registered yet — store pending invitation
+  await db.from('invitations').upsert(
+    { org_id: orgId, email, role, invited_by: invitedBy },
+    { onConflict: 'org_id,email' },
+  );
+  return 'invited';
+}
+
+export async function dbRemoveMember(membershipId: string): Promise<void> {
+  await db.from('memberships').delete().eq('id', membershipId);
+}
+
+export async function dbChangeRole(membershipId: string, role: string): Promise<void> {
+  await db.from('memberships').update({ role }).eq('id', membershipId);
+}
+
+export async function dbRemoveInvitation(id: string): Promise<void> {
+  await db.from('invitations').delete().eq('id', id);
+}
+
+export async function dbAcceptInvitations(): Promise<void> {
+  await db.rpc('accept_pending_invitations');
+}
+
+// ─── profile ────────────────────────────────────────────────────
+
+export async function dbUpdateProfile(userId: string, fullName: string): Promise<void> {
+  await Promise.all([
+    db.auth.updateUser({ data: { full_name: fullName } }),
+    db.from('profiles').update({ full_name: fullName }).eq('id', userId),
+  ]);
+}
+
 // ─── org setup ──────────────────────────────────────────────────
 
 export async function ensureOrg(userId: string, displayName: string): Promise<string> {

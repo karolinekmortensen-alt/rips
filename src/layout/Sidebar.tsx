@@ -1,6 +1,5 @@
 import { Icon } from '../components/Icon';
 import { RipsLogo } from '../components/RipsLogo';
-import { getUserName } from '../supabase';
 import type { Collection } from '../types';
 
 interface Props {
@@ -8,13 +7,15 @@ interface Props {
   setView: (v: string) => void;
   collections: Collection[];
   user: any;
+  displayName: string;
   onLogout: () => void;
 }
 
-export function Sidebar({ view, setView, collections, user, onLogout }: Props) {
+export function Sidebar({ view, setView, collections, displayName, onLogout }: Props) {
   const navItems = [
     { id:'dashboard',   label:'Oversikt',   icon:'grid'   },
     { id:'collections', label:'Samlinger',  icon:'folder', count: collections.length },
+    { id:'team',        label:'Team',       icon:'users'  },
     { id:'profile',     label:'Profil',     icon:'user'   },
   ];
   const isCollectionActive = view === 'collection' || view === 'collections';
@@ -23,7 +24,7 @@ export function Sidebar({ view, setView, collections, user, onLogout }: Props) {
     <aside className="rips-sidebar">
       <div className="rips-brand">
         <RipsLogo size={30} bg="var(--paper-2)" />
-        <span className="rips-org">{getUserName(user)}</span>
+        <span className="rips-org">{displayName}</span>
       </div>
       <div className="rips-sec">Workspace</div>
       {navItems.map(item => (

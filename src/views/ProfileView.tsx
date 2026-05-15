@@ -1,16 +1,41 @@
+import { useState } from 'react';
 import { getUserName } from '../supabase';
+import { dbUpdateProfile } from '../lib/data';
 import type { Collection } from '../types';
 
 interface Props {
   user: any;
   collections: Collection[];
+  onUserUpdated: (newName: string) => void;
 }
 
-export function ProfileView({ user, collections }: Props) {
+export function ProfileView({ user, collections, onUserUpdated }: Props) {
   const totalRisks = collections.reduce((s, c) => s + c.risks.length, 0);
   const totalMits  = collections.reduce((s, c) => s + c.risks.reduce((s2, r) => s2 + r.mitigations.length, 0), 0);
+
   const displayName = getUserName(user);
-  const initials    = (n: string) => (n || 'B').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
+  const initials    = (n: string) => (n || 'B').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+  const [editing,  setEditing]  = useState(false);
+  const [nameVal,  setNameVal]  = useState(displayName);
+  const [saving,   setSaving]   = useState(false);
+  const [saveMsg,  setSaveMsg]  = useState('');
+
+  const handleSave = async () => {
+    if (!nameVal.trim()) return;
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      await dbUpdateProfile(user.id, nameVal.trim());
+      onUserUpdated(nameVal.trim());
+      setSaveMsg('✓ Lagret');
+      setEditing(false);
+    } catch {
+      setSaveMsg('Noe gikk galt.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="app-page">
@@ -22,16 +47,49 @@ export function ProfileView({ user, collections }: Props) {
       </header>
 
       <div style={{ display:'grid', gridTemplateColumns:'280px 1fr', gap:24, alignItems:'start' }}>
+        {/* Profilkort */}
         <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:8, padding:28, display:'flex', flexDirection:'column', alignItems:'center', gap:16 }}>
           <div style={{ width:72, height:72, borderRadius:'50%', background:'var(--leaf)', color:'var(--leaf-skin)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:26, fontWeight:600, letterSpacing:'-0.01em' }}>
             {initials(displayName)}
           </div>
-          <div style={{ textAlign:'center' }}>
-            <div style={{ fontWeight:500, fontSize:17 }}>{displayName}</div>
-            <div style={{ fontSize:13, color:'var(--ink-2)', marginTop:4 }}>{user?.email}</div>
+          <div style={{ textAlign:'center', width:'100%' }}>
+            {editing ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <input
+                  className="rips-input"
+                  value={nameVal}
+                  onChange={e => setNameVal(e.target.value)}
+                  style={{ textAlign:'center' }}
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
+                />
+                <div style={{ display:'flex', gap:6, justifyContent:'center' }}>
+                  <button className="rips-btn rips-small" onClick={handleSave} disabled={saving}>
+                    {saving ? 'Lagrer…' : 'Lagre'}
+                  </button>
+                  <button className="rips-btn-ghost rips-small" onClick={() => { setEditing(false); setNameVal(displayName); }}>
+                    Avbryt
+                  </button>
+                </div>
+                {saveMsg && <div style={{ fontSize:12, color: saveMsg.startsWith('✓') ? 'var(--leaf)' : 'var(--currant)' }}>{saveMsg}</div>}
+              </div>
+            ) : (
+              <>
+                <div style={{ fontWeight:500, fontSize:17 }}>{displayName}</div>
+                <div style={{ fontSize:13, color:'var(--ink-2)', marginTop:4 }}>{user?.email}</div>
+                <button
+                  className="rips-btn-ghost rips-small"
+                  style={{ marginTop:10, fontSize:12 }}
+                  onClick={() => { setEditing(true); setSaveMsg(''); }}
+                >
+                  Endre navn
+                </button>
+              </>
+            )}
           </div>
         </div>
 
+        {/* Stats + eksport */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
           <div style={{ background:'var(--paper)', border:'1px solid var(--rule)', borderRadius:8, padding:'20px 24px' }}>
             <div className="rips-cap" style={{ marginBottom:16 }}>Aktivitet i workspace</div>
@@ -60,7 +118,7 @@ export function ProfileView({ user, collections }: Props) {
                 const json = JSON.stringify({ collections, exportedAt: new Date().toISOString() }, null, 2);
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(new Blob([json], { type:'application/json' }));
-                a.download = `rips-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.download = `rips-backup-${new Date().toISOString().slice(0, 10)}.json`;
                 a.click();
               }}
             >
