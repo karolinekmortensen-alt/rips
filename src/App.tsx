@@ -24,6 +24,8 @@ export function App() {
         else           setScreen('welcome');
       } else if (event === 'SIGNED_IN') {
         if (!isPasswordRecovery) { setUser(session?.user); setScreen('app'); }
+      } else if (event === 'USER_UPDATED') {
+        if (session) { setUser(session.user); setScreen('app'); }
       } else if (event === 'SIGNED_OUT') {
         setUser(null); setScreen('welcome');
       }
