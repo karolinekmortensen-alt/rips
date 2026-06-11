@@ -292,6 +292,43 @@ async function syncRiskTags(riskId: string, orgId: string, tagNames: string[], t
 
 // ─── collections ────────────────────────────────────────────────
 
+export async function dbMoveCollection(collectionId: string, targetOrgId: string): Promise<void> {
+  // Get risks in this collection
+  const { data: risks } = await db.from('risks').select('id').eq('collection_id', collectionId);
+  const riskIds = (risks || []).map((r: any) => r.id);
+
+  if (riskIds.length > 0) {
+    // Get all tag names used by these risks
+    const { data: rtRows } = await db
+      .from('risk_tags')
+      .select('risk_id, tag_id, tags(name)')
+      .in('risk_id', riskIds);
+
+    const allRt = rtRows || [];
+    const tagNames = [...new Set(allRt.map((rt: any) => rt.tags?.name).filter(Boolean))] as string[];
+
+    if (tagNames.length > 0) {
+      // Ensure tags exist in target org and build old→new ID map
+      const newIds = await Promise.all(tagNames.map(n => dbEnsureTag(targetOrgId, n, [])));
+      const nameToNewId = Object.fromEntries(tagNames.map((n, i) => [n, newIds[i]]));
+
+      // Re-point risk_tags to the new tag IDs
+      for (const rt of allRt) {
+        const newTagId = nameToNewId[(rt as any).tags?.name];
+        if (newTagId && newTagId !== rt.tag_id) {
+          await db.from('risk_tags')
+            .update({ tag_id: newTagId })
+            .eq('risk_id', rt.risk_id)
+            .eq('tag_id', rt.tag_id);
+        }
+      }
+    }
+  }
+
+  const { error } = await db.from('collections').update({ org_id: targetOrgId }).eq('id', collectionId);
+  if (error) throw error;
+}
+
 export async function dbInsertCollection(orgId: string, input: Omit<Collection, 'id' | 'risks'>): Promise<string> {
   const { data, error } = await db.from('collections').insert({
     org_id: orgId,

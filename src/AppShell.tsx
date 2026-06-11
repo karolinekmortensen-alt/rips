@@ -11,7 +11,7 @@ import { AddCollectionModal } from './modals/AddCollectionModal';
 import { RipsLogo } from './components/RipsLogo';
 import { INITIAL_TAGS } from './constants';
 import {
-  loadMyOrgs, createPersonalOrg, loadWorkspace, loadOrgProfiles,
+  loadMyOrgs, createPersonalOrg, loadWorkspace, loadOrgProfiles, dbMoveCollection,
   dbInsertCollection, dbUpdateCollection, dbDeleteCollection,
   dbInsertRisk, dbDeleteRisk, dbSyncRisk,
   dbEnsureTag, dbDeleteTag,
@@ -123,6 +123,11 @@ export function AppShell({ user, onLogout }: Props) {
     dbUpdateCollection(updated.id, updated).catch(console.error);
   };
 
+  const moveCollection = async (collectionId: string, targetOrgId: string) => {
+    await dbMoveCollection(collectionId, targetOrgId);
+    setCollections(prev => prev.filter(c => c.id !== collectionId));
+  };
+
   const deleteCollection = async (id: string) => {
     await dbDeleteCollection(id).catch(console.error);
     setCollections(prev => prev.filter(c => c.id !== id));
@@ -221,7 +226,10 @@ export function AppShell({ user, onLogout }: Props) {
             onSelect={id => { setSelectedId(id); setViewRaw('collection'); }}
             onAdd={() => setShowAddCol(true)}
             onDelete={deleteCollection}
+            onMove={moveCollection}
             canEdit={canEdit}
+            orgs={orgs}
+            activeOrgId={activeOrgId}
           />
         )}
         {view === 'collection' && selectedCollection && (
