@@ -137,6 +137,12 @@ export async function createPersonalOrg(displayName: string): Promise<string> {
   return data as string;
 }
 
+export async function createTeamOrg(name: string): Promise<string> {
+  const { data, error } = await db.rpc('create_team_org', { org_name: name });
+  if (error) throw new Error('Kunne ikke opprette team-workspace: ' + error.message);
+  return data as string;
+}
+
 // ─── helpers ────────────────────────────────────────────────────
 
 function groupBy<T extends Record<string, any>>(arr: T[], key: string): Record<string, T[]> {

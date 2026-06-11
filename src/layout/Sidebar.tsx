@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Icon } from '../components/Icon';
 import { RipsLogo } from '../components/RipsLogo';
 import type { Collection } from '../types';
@@ -13,6 +13,7 @@ interface Props {
   orgs: OrgInfo[];
   activeOrgId: string;
   onSwitchOrg: (id: string) => void;
+  onCreateOrg: (name: string) => Promise<void>;
   onLogout: () => void;
 }
 
@@ -20,8 +21,12 @@ const ROLE_LABEL: Record<string, string> = {
   owner: 'Eier', admin: 'Admin', editor: 'Redaktør', viewer: 'Leser',
 };
 
-export function Sidebar({ view, setView, collections, displayName, orgs, activeOrgId, onSwitchOrg, onLogout }: Props) {
-  const [orgOpen, setOrgOpen] = useState(false);
+export function Sidebar({ view, setView, collections, displayName, orgs, activeOrgId, onSwitchOrg, onCreateOrg, onLogout }: Props) {
+  const [orgOpen,     setOrgOpen]     = useState(false);
+  const [creatingOrg, setCreatingOrg] = useState(false);
+  const [newOrgName,  setNewOrgName]  = useState('');
+  const [saving,      setSaving]      = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const activeOrg  = orgs.find(o => o.id === activeOrgId);
   const isCollectionActive = view === 'collection' || view === 'collections';
@@ -43,28 +48,26 @@ export function Sidebar({ view, setView, collections, displayName, orgs, activeO
       <div style={{ position:'relative', margin:'0 0 4px' }}>
         <button
           className="rips-org-btn"
-          onClick={() => setOrgOpen(o => !o)}
-          title={orgs.length > 1 ? 'Bytt workspace' : activeOrg?.name}
+          onClick={() => { setOrgOpen(o => !o); setCreatingOrg(false); setNewOrgName(''); }}
+          title="Administrer workspaces"
         >
           <Icon name={activeOrg?.isPersonal ? 'user' : 'users'} size={13} color="var(--ink-3)" />
           <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'left' }}>
             {activeOrg?.name ?? '…'}
           </span>
-          {orgs.length > 1 && (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              strokeLinecap="round" strokeLinejoin="round"
-              style={{ flexShrink:0, transform: orgOpen ? 'rotate(180deg)' : 'none', transition:'transform 150ms' }}>
-              <path d="m6 9 6 6 6-6"/>
-            </svg>
-          )}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round"
+            style={{ flexShrink:0, transform: orgOpen ? 'rotate(180deg)' : 'none', transition:'transform 150ms' }}>
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
         </button>
-        {orgOpen && orgs.length > 1 && (
-          <div className="rips-org-dropdown" onClick={() => setOrgOpen(false)}>
+        {orgOpen && (
+          <div className="rips-org-dropdown">
             {orgs.map(o => (
               <div
                 key={o.id}
                 className={`rips-org-option ${o.id === activeOrgId ? 'active' : ''}`}
-                onClick={() => onSwitchOrg(o.id)}
+                onClick={() => { onSwitchOrg(o.id); setOrgOpen(false); setCreatingOrg(false); }}
               >
                 <Icon name={o.isPersonal ? 'user' : 'users'} size={13} color="var(--ink-3)" />
                 <div style={{ flex:1, minWidth:0 }}>
@@ -78,6 +81,54 @@ export function Sidebar({ view, setView, collections, displayName, orgs, activeO
                 {o.id === activeOrgId && <Icon name="check" size={13} color="var(--leaf)" />}
               </div>
             ))}
+            <div style={{ borderTop:'1px solid var(--rule)', marginTop:4, paddingTop:4 }}>
+              {creatingOrg ? (
+                <form
+                  style={{ display:'flex', gap:4, padding:'4px 8px' }}
+                  onSubmit={async e => {
+                    e.preventDefault();
+                    const name = newOrgName.trim();
+                    if (!name) return;
+                    setSaving(true);
+                    try {
+                      await onCreateOrg(name);
+                      setOrgOpen(false);
+                      setCreatingOrg(false);
+                      setNewOrgName('');
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  <input
+                    ref={inputRef}
+                    className="rips-input"
+                    style={{ flex:1, fontSize:12, height:26, padding:'0 6px' }}
+                    placeholder="Navn på team…"
+                    value={newOrgName}
+                    onChange={e => setNewOrgName(e.target.value)}
+                    disabled={saving}
+                    autoFocus
+                  />
+                  <button className="rips-btn" style={{ fontSize:11, padding:'0 8px', height:26 }} disabled={saving || !newOrgName.trim()}>
+                    {saving ? '…' : 'Opprett'}
+                  </button>
+                  <button type="button" className="rips-btn-ghost" style={{ padding:'0 5px', height:26, color:'var(--ink-3)' }}
+                    onClick={() => { setCreatingOrg(false); setNewOrgName(''); }}>
+                    <Icon name="x" size={12} />
+                  </button>
+                </form>
+              ) : (
+                <div
+                  className="rips-org-option"
+                  style={{ color:'var(--ink-2)' }}
+                  onClick={e => { e.stopPropagation(); setCreatingOrg(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+                >
+                  <Icon name="plus" size={13} color="var(--ink-3)" />
+                  <span style={{ fontSize:12 }}>Nytt team-workspace</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

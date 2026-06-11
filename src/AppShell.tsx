@@ -11,7 +11,7 @@ import { AddCollectionModal } from './modals/AddCollectionModal';
 import { RipsLogo } from './components/RipsLogo';
 import { INITIAL_TAGS } from './constants';
 import {
-  loadMyOrgs, createPersonalOrg, loadWorkspace, loadOrgProfiles, dbMoveCollection,
+  loadMyOrgs, createPersonalOrg, createTeamOrg, loadWorkspace, loadOrgProfiles, dbMoveCollection,
   dbInsertCollection, dbUpdateCollection, dbDeleteCollection,
   dbInsertRisk, dbDeleteRisk, dbSyncRisk,
   dbEnsureTag, dbDeleteTag,
@@ -82,6 +82,19 @@ export function AppShell({ user, onLogout }: Props) {
     };
     init().catch(err => { console.error('Init error:', err); setLoading(false); });
   }, []);
+
+  const createOrg = async (name: string) => {
+    const newId = await createTeamOrg(name);
+    let myOrgs = await loadMyOrgs(user.id);
+    myOrgs.sort((a, b) => {
+      if (a.isPersonal !== b.isPersonal) return a.isPersonal ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    setOrgs(myOrgs);
+    setActiveOrgId(newId);
+    localStorage.setItem(`rips-active-org-${user.id}`, newId);
+    await applyWorkspace(newId);
+  };
 
   const switchOrg = async (id: string) => {
     if (id === orgId.current) return;
@@ -207,6 +220,7 @@ export function AppShell({ user, onLogout }: Props) {
         orgs={orgs}
         activeOrgId={activeOrgId}
         onSwitchOrg={switchOrg}
+        onCreateOrg={createOrg}
         onLogout={onLogout}
       />
       <main className="app-main">
